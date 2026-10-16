@@ -1,0 +1,5 @@
+/cloudundo
+/dist/
+*.test
+*.out
+internal/**/testdata/fuzz/
