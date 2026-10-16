@@ -4,15 +4,29 @@
 
 cloudundo sits in front of the AWS commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3 or DynamoDB, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back.
 
-> **Status: early development.** Protection and `undo` for S3 and DynamoDB work and are tested against a simulated AWS, but have not yet been run against real AWS. The agent hooks come next. Try it on a test account, not production data.
+> **Status: early development.** Protection and `undo` for S3 and DynamoDB work and are tested against a simulated AWS, but have not yet been run against real AWS. The agent hooks are built from each agent's documentation and tested with recorded inputs, not yet inside the agents themselves. Try it on a test account, not production data.
 
 ## Why
 
 AI coding agents have deleted real data: a Codex session reduced a 3 TB S3 bucket to 34 KB, and a Cursor agent deleted a production database and its backups in nine seconds. Most guardrails try to *block* risky commands, which slows agents down until people turn the guardrails off. cloudundo takes the other route: let the agent work, and make sure every delete can be undone.
 
+## Set up
+
+Build it (`go build ./cmd/cloudundo`), put `cloudundo` on your PATH, then add the hook to your agent:
+
+```sh
+cloudundo install claude-code --write   # ~/.claude/settings.json
+cloudundo install cursor --write        # ~/.cursor/hooks.json
+cloudundo install codex --write         # ~/.codex/hooks.json, then run /hooks in Codex to trust it
+```
+
+Without `--write` it only prints what to add. With it, cloudundo keeps your other settings, saves the old file next to it (`*.before-cloudundo`), and never adds itself twice.
+
+From then on the agent runs `cloudundo hook <agent>` before every shell command. Commands that do not touch S3 or DynamoDB data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
+
 ## How it works
 
-Run `cloudundo protect` before an agent's command (the hooks for Claude Code, Cursor and Codex will do this for you):
+The hook calls the same logic as `cloudundo protect`, which you can also run yourself:
 
 ```sh
 cloudundo protect -- 'aws s3 rm s3://uploads --recursive'
@@ -49,6 +63,8 @@ Things to know:
 - **Restored buckets come back private**, with their objects but not their old policy, website, CORS or tags.
 - **Restoring a DynamoDB table takes minutes.** The first `undo --yes` starts it; run the same command again once it is done to put the settings back. Auto scaling, alarms and IAM policies are not restored. On-demand backups are kept until you delete them, and AWS bills for their storage.
 - cloudundo calls your own `aws` CLI with the same profile, region and environment as the agent's command. Inline access keys are used but never written to disk.
+- **The hook sees the command line, not what scripts do.** `./deploy.sh` that calls `aws s3 rm` inside is not seen. cloudundo protects AWS CLI commands the agent types.
+- **Every problem cloudundo can see blocks the command**: bad hook input, an AWS error, a full disk, its own bugs. If the hook program cannot start or times out, Claude Code (v2.1.295+, `onFailure: block`) and Cursor (`failClosed: true`) block too. Codex has no such setting, so there a missing or hung cloudundo lets commands through.
 - Undo puts each key back to how it was just before the command, using your computer's clock. If an app writes to the same keys after the command, undo will roll those writes back too, which is why it shows a preview first.
 
 ### Commands it understands
@@ -80,7 +96,7 @@ Things to know:
 
 1. ~~S3: versioning before object deletes, bucket copies before bucket deletes, `undo`.~~ Done.
 2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
-3. Hooks for Claude Code, Cursor and Codex, failing closed.
+3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; next is trying them inside each agent.
 4. Real-AWS tests for every case before the first release.
 
 ## Development
@@ -90,6 +106,7 @@ go build ./cmd/cloudundo
 go vet ./...
 go test -race ./...
 go test -run=^$ -fuzz=FuzzAnalyze -fuzztime=60s ./internal/effects
+go test -run=^$ -fuzz=FuzzHookInput -fuzztime=60s ./cmd/cloudundo
 ```
 
 No dependencies outside the Go standard library.

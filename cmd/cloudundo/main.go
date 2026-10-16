@@ -31,6 +31,8 @@ Usage:
   cloudundo undo <id> [--yes]               show what undo would restore; --yes restores it
   cloudundo log [--json]                    list recorded commands
   cloudundo check [--json] -- <command>     only show what a command would change
+  cloudundo install <agent> [--write]       set up the hook for claude-code, cursor or codex
+  cloudundo hook <agent>                    what the agent runs before each shell command (reads JSON on stdin)
   cloudundo version
 
 Settings (environment):
@@ -54,6 +56,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdLog(args[1:], stdout, stderr)
 	case "undo":
 		return cmdUndo(args[1:], stdout, stderr)
+	case "hook":
+		return cmdHook(args[1:], stdout, stderr)
+	case "install":
+		return cmdInstall(args[1:], stdout, stderr)
 	case "version", "--version":
 		fmt.Fprintln(stdout, "cloudundo", version)
 		return 0
