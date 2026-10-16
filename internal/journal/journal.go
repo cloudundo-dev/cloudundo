@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cloudundo/cloudundo/internal/awscli"
 	"github.com/cloudundo/cloudundo/internal/s3effects"
 )
 
@@ -22,12 +23,34 @@ type Entry struct {
 	Command string             `json:"command"`
 	Agent   string             `json:"agent,omitempty"`
 	Effects []s3effects.Effect `json:"effects"`
-	// Protection lists what cloudundo did before the command ran
-	// (for example "versioning-enabled", "backup-copied"). Empty until
-	// protections are implemented.
-	Protection []string          `json:"protection,omitempty"`
-	Undo       map[string]string `json:"undo,omitempty"`
-	Status     string            `json:"status"`
+	// Protection lists what cloudundo did before the command ran.
+	Protection []string `json:"protection,omitempty"`
+	// Notes are things the user should know (costs, undo windows).
+	Notes []string `json:"notes,omitempty"`
+	// Blocked lists why the command was stopped, if it was.
+	Blocked []string   `json:"blocked,omitempty"`
+	Undo    []UndoStep `json:"undo,omitempty"`
+	// Status is "protected", "blocked", "unchanged" or "undone".
+	Status string `json:"status"`
+}
+
+// UndoStep is what undo needs to reverse one effect.
+type UndoStep struct {
+	// Kind is "s3-versions" (restore from object versions) or
+	// "s3-bucket-copy" (recreate a deleted bucket from a backup copy).
+	Kind      string   `json:"kind"`
+	Bucket    string   `json:"bucket"`
+	Key       string   `json:"key,omitempty"`
+	Keys      []string `json:"keys,omitempty"`
+	Prefix    string   `json:"prefix,omitempty"`
+	Recursive bool     `json:"recursive,omitempty"`
+	// Since is the moment before the command ran; undo puts every key back
+	// to how it was at this time.
+	Since        time.Time   `json:"since"`
+	Region       string      `json:"region,omitempty"`
+	BackupBucket string      `json:"backup_bucket,omitempty"`
+	BackupPrefix string      `json:"backup_prefix,omitempty"`
+	Conn         awscli.Conn `json:"conn"`
 }
 
 // Journal is an append-only JSON-lines file.
@@ -122,4 +145,34 @@ func (j *Journal) Get(id int) (Entry, bool, error) {
 		}
 	}
 	return Entry{}, false, nil
+}
+
+// Update replaces the entry with the same ID. The file is rewritten
+// through a temporary file so a crash never leaves it half written.
+func (j *Journal) Update(e Entry) error {
+	all, err := j.List()
+	if err != nil {
+		return err
+	}
+	found := false
+	var buf []byte
+	for _, old := range all {
+		if old.ID == e.ID {
+			old = e
+			found = true
+		}
+		line, err := json.Marshal(old)
+		if err != nil {
+			return err
+		}
+		buf = append(append(buf, line...), '\n')
+	}
+	if !found {
+		return fmt.Errorf("journal: no entry #%d", e.ID)
+	}
+	tmp := j.path + ".tmp"
+	if err := os.WriteFile(tmp, buf, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, j.path)
 }

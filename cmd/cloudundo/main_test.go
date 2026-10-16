@@ -34,9 +34,10 @@ func TestCheckRecordLogUndo(t *testing.T) {
 		t.Fatalf("log: %d\n%s", code, out)
 	}
 
-	code, _, errOut := runCLI(t, "undo", "1")
-	if code != 3 || !strings.Contains(errOut, "only recorded") {
-		t.Fatalf("undo: %d\n%s", code, errOut)
+	// A check-only entry has nothing to undo.
+	code, out, _ = runCLI(t, "undo", "1")
+	if code != 0 || !strings.Contains(out, "Nothing to restore") {
+		t.Fatalf("undo: %d\n%s", code, out)
 	}
 
 	code, _, _ = runCLI(t, "undo", "42")

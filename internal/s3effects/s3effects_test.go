@@ -3,12 +3,15 @@ package s3effects
 import (
 	"reflect"
 	"testing"
+
+	"github.com/cloudundo/cloudundo/internal/awscli"
 )
 
 // strip clears fields the table does not care about.
 func strip(effs []Effect) []Effect {
 	for i := range effs {
 		effs[i].Command = ""
+		effs[i].Conn = awscli.Conn{}
 	}
 	return effs
 }
@@ -161,6 +164,41 @@ func TestAnalyze(t *testing.T) {
 			want: []Effect{{Kind: DeleteObjects, Bucket: "logs", Key: "$k", Uncertain: true}},
 		},
 		{
+			name: "xargs supplies the target",
+			line: "cat keys | xargs aws s3 rm",
+			want: []Effect{{Kind: DeleteObjects, Uncertain: true, Detail: "the target is not written in the command"}},
+		},
+		{
+			name: "target in a variable",
+			line: "aws s3 rm $TARGET --recursive",
+			want: []Effect{{Kind: DeleteObjects, Uncertain: true, Detail: "the target is not written in the command"}},
+		},
+		{
+			name: "bucket delete from a variable",
+			line: "aws s3 rb \"$B\" --force",
+			want: []Effect{{Kind: DeleteBucket, Uncertain: true, Detail: "the target is not written in the command"}},
+		},
+		{
+			name: "copy to a variable destination",
+			line: "aws s3 cp report.pdf $DEST",
+			want: []Effect{{Kind: OverwriteObjects, Uncertain: true, Detail: "the target is not written in the command"}},
+		},
+		{
+			name: "copy of a variable file into a folder",
+			line: "aws s3 cp $FILE s3://site/static/",
+			want: []Effect{{Kind: OverwriteObjects, Bucket: "site", Key: "static/$FILE", Uncertain: true}},
+		},
+		{
+			name: "copy to a variable path could be S3, so it counts",
+			line: "aws s3 cp s3://site/a.txt $OUT",
+			want: []Effect{{Kind: OverwriteObjects, Uncertain: true, Detail: "the target is not written in the command"}},
+		},
+		{
+			name: "rm of a local path is rejected by aws",
+			line: "aws s3 rm ./local.txt",
+			want: nil,
+		},
+		{
 			name: "inside bash -c",
 			line: `bash -c "aws s3 rb s3://scratch --force"`,
 			want: []Effect{{Kind: DeleteBucket, Bucket: "scratch", Force: true}},
@@ -201,5 +239,19 @@ func TestCommandIsKept(t *testing.T) {
 	effs := Analyze("echo start && aws s3 rm s3://b/k")
 	if len(effs) != 1 || effs[0].Command != "aws s3 rm s3://b/k" {
 		t.Fatalf("got %+v", effs)
+	}
+}
+
+func TestConnIsKept(t *testing.T) {
+	effs := Analyze("export AWS_PROFILE=prod; AWS_SECRET_ACCESS_KEY=s3cr3t aws --region eu-west-1 s3 rm s3://b/k")
+	if len(effs) != 1 {
+		t.Fatalf("got %+v", effs)
+	}
+	c := effs[0].Conn
+	if c.Region != "eu-west-1" || c.Env["AWS_PROFILE"] != "prod" || !c.HasInlineCredentials() {
+		t.Fatalf("conn = %+v", c)
+	}
+	if _, ok := c.Env["AWS_SECRET_ACCESS_KEY"]; ok {
+		t.Fatal("secret key kept in the journal-visible env")
 	}
 }

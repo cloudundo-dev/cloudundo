@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cloudundo/cloudundo/internal/awscli"
 	"github.com/cloudundo/cloudundo/internal/shellparse"
 )
 
@@ -49,20 +50,23 @@ type Effect struct {
 	Uncertain bool   `json:"uncertain,omitempty"`
 	Detail    string `json:"detail,omitempty"`
 	Command   string `json:"command"`
+	// Conn is the account and region the command uses, so protection
+	// and undo run against the same place.
+	Conn awscli.Conn `json:"conn"`
 }
 
 // Analyze returns the S3 effects of every aws command in a shell line.
 func Analyze(line string) []Effect {
 	var out []Effect
 	for _, s := range shellparse.Split(line) {
-		out = append(out, AnalyzeArgs(s.Args, s.Uncertain)...)
+		out = append(out, AnalyzeArgs(s.Args, s.Uncertain, s.Env)...)
 	}
 	return out
 }
 
 // AnalyzeArgs returns the S3 effects of one argv. Non-aws commands and
 // read-only aws commands return nothing.
-func AnalyzeArgs(args []string, uncertain bool) []Effect {
+func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect {
 	if len(args) == 0 || filepath.Base(args[0]) != "aws" {
 		return nil
 	}
@@ -82,8 +86,13 @@ func AnalyzeArgs(args []string, uncertain bool) []Effect {
 	case "s3api":
 		effs = lowLevel(p)
 	}
+	conn := awscli.ConnFromEnv(env)
+	conn.Profile = p.value("profile")
+	conn.Region = p.value("region")
+	conn.Endpoint = p.value("endpoint-url")
 	for i := range effs {
 		effs[i].Command = cmd
+		effs[i].Conn = conn
 		if uncertain {
 			effs[i].Uncertain = true
 		}
@@ -100,74 +109,97 @@ func highLevel(p parsed) []Effect {
 	args := p.pos[2:]
 	recursive := p.bool("recursive")
 	filtered := p.has("include") || p.has("exclude")
+	arg := func(i int) (s3URI, argKind) {
+		if i >= len(args) {
+			return s3URI{}, argMissing
+		}
+		return classify(args[i])
+	}
+	hidden := func(k Kind) []Effect {
+		return []Effect{{Kind: k, Uncertain: true, Detail: "the target is not written in the command"}}
+	}
 
 	switch verb {
 	case "rm":
-		if len(args) < 1 {
-			return nil
+		u, k := arg(0)
+		switch k {
+		case argS3:
+			return []Effect{objectsEffect(DeleteObjects, u, recursive, filtered)}
+		case argMissing, argDynamic:
+			return hidden(DeleteObjects)
 		}
-		u, ok := parseS3URI(args[0])
-		if !ok {
-			return nil
-		}
-		return []Effect{objectsEffect(DeleteObjects, u, recursive, filtered)}
+		return nil // not an S3 path: aws rejects it
 
 	case "rb":
-		if len(args) < 1 {
-			return nil
-		}
-		u, ok := parseS3URI(args[0])
-		if !ok {
-			return nil
-		}
-		return []Effect{{Kind: DeleteBucket, Bucket: u.bucket, Force: p.bool("force"), Uncertain: u.uncertain}}
-
-	case "mv":
-		if len(args) < 2 {
-			return nil
-		}
-		var effs []Effect
-		if src, ok := parseS3URI(args[0]); ok {
-			e := objectsEffect(DeleteObjects, src, recursive, filtered)
-			e.Detail = "moved away"
-			effs = append(effs, e)
-		}
-		if dst, ok := parseS3URI(args[1]); ok {
-			effs = append(effs, destEffect(dst, args[0], recursive, filtered))
-		}
-		return effs
-
-	case "cp":
-		if len(args) < 2 {
-			return nil
-		}
-		if dst, ok := parseS3URI(args[1]); ok {
-			return []Effect{destEffect(dst, args[0], recursive, filtered)}
+		u, k := arg(0)
+		switch k {
+		case argS3:
+			return []Effect{{Kind: DeleteBucket, Bucket: u.bucket, Force: p.bool("force"), Uncertain: u.uncertain}}
+		case argMissing, argDynamic:
+			return hidden(DeleteBucket)
 		}
 		return nil
 
-	case "sync":
-		if len(args) < 2 {
-			return nil
+	case "mv", "cp", "sync":
+		src, sk := arg(0)
+		dst, dk := arg(1)
+		var effs []Effect
+		if verb == "mv" {
+			switch sk {
+			case argS3:
+				e := objectsEffect(DeleteObjects, src, recursive, filtered)
+				e.Detail = "moved away"
+				effs = append(effs, e)
+			case argMissing, argDynamic:
+				effs = append(effs, hidden(DeleteObjects)...)
+			}
 		}
-		dst, ok := parseS3URI(args[1])
-		if !ok {
-			return nil // syncing down to local disk
-		}
-		effs := []Effect{{
-			Kind: OverwriteObjects, Bucket: dst.bucket, Prefix: dirPrefix(dst.key),
-			Recursive: true, Filtered: filtered, Uncertain: dst.uncertain,
-		}}
-		if p.bool("delete") {
-			effs = append(effs, Effect{
-				Kind: DeleteObjects, Bucket: dst.bucket, Prefix: dirPrefix(dst.key),
-				Recursive: true, Filtered: filtered, Uncertain: dst.uncertain,
-				Detail: "sync --delete removes objects missing from the source",
-			})
+		switch dk {
+		case argS3:
+			if verb == "sync" {
+				effs = append(effs, Effect{
+					Kind: OverwriteObjects, Bucket: dst.bucket, Prefix: dirPrefix(dst.key),
+					Recursive: true, Filtered: filtered, Uncertain: dst.uncertain,
+				})
+				if p.bool("delete") {
+					effs = append(effs, Effect{
+						Kind: DeleteObjects, Bucket: dst.bucket, Prefix: dirPrefix(dst.key),
+						Recursive: true, Filtered: filtered, Uncertain: dst.uncertain,
+						Detail: "sync --delete removes objects missing from the source",
+					})
+				}
+			} else {
+				srcText := ""
+				if sk != argMissing {
+					srcText = args[0]
+				}
+				effs = append(effs, destEffect(dst, srcText, recursive, filtered))
+			}
+		case argMissing, argDynamic:
+			effs = append(effs, hidden(OverwriteObjects)...)
 		}
 		return effs
 	}
 	return nil
+}
+
+type argKind int
+
+const (
+	argMissing argKind = iota
+	argS3              // s3://...
+	argDynamic         // $VAR, $(...), backticks: could be anything
+	argLocal           // a local path
+)
+
+func classify(a string) (s3URI, argKind) {
+	if u, ok := parseS3URI(a); ok {
+		return u, argS3
+	}
+	if strings.ContainsAny(a, "$`") {
+		return s3URI{}, argDynamic
+	}
+	return s3URI{}, argLocal
 }
 
 // lowLevel handles "aws s3api <operation>".
@@ -244,6 +276,9 @@ func destEffect(dst s3URI, src string, recursive, filtered bool) Effect {
 			name = su.key
 		}
 		e.Key = dst.key + filepath.Base(name)
+		if name == "" || looksDynamic(name) {
+			e.Uncertain = true
+		}
 	default:
 		e.Key = dst.key
 	}

@@ -1,7 +1,7 @@
 // Command cloudundo makes what an AI agent deletes in AWS recoverable.
 //
-// This early version reads commands and reports their S3 effects.
-// Protection (versioning, backups) and undo come next.
+// "protect" runs before an agent's command: it makes the command's S3
+// changes recoverable, or blocks the command. "undo" puts the data back.
 package main
 
 import (
@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/cloudundo/cloudundo/internal/journal"
@@ -26,10 +25,18 @@ func main() {
 const usage = `cloudundo: make what your AI agent deletes in AWS recoverable.
 
 Usage:
-  cloudundo check [--json] [--record] -- <command>   show what a command would change in S3
-  cloudundo log [--json]                              list recorded commands
-  cloudundo undo <id>                                 restore what a command changed (coming soon)
+  cloudundo protect [--json] -- <command>   make the command's S3 changes recoverable, or block it
+                                           exit 0: safe to run   exit 2: do not run
+  cloudundo undo <id> [--yes]               show what undo would restore; --yes restores it
+  cloudundo log [--json]                    list recorded commands
+  cloudundo check [--json] -- <command>     only show what a command would change
   cloudundo version
+
+Settings (environment):
+  CLOUDUNDO_HOME            where the journal lives (default ~/.cloudundo)
+  CLOUDUNDO_RETENTION_DAYS  undo window on buckets cloudundo versions (default 7)
+  CLOUDUNDO_MAX_COPY_GB     largest bucket copied before a bucket delete (default 5)
+  CLOUDUNDO_AWS_BIN         aws CLI to use (default "aws" on PATH)
 `
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -38,6 +45,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	switch args[0] {
+	case "protect":
+		return cmdProtect(args[1:], stdout, stderr)
 	case "check":
 		return cmdCheck(args[1:], stdout, stderr)
 	case "log":
@@ -150,34 +159,6 @@ func cmdLog(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return 0
-}
-
-func cmdUndo(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: cloudundo undo <id>")
-		return 2
-	}
-	id, err := strconv.Atoi(strings.TrimPrefix(args[0], "#"))
-	if err != nil {
-		fmt.Fprintf(stderr, "cloudundo undo: %q is not a journal id\n", args[0])
-		return 2
-	}
-	j, err := openJournal()
-	if err != nil {
-		fmt.Fprintln(stderr, "cloudundo:", err)
-		return 1
-	}
-	e, ok, err := j.Get(id)
-	if err != nil {
-		fmt.Fprintln(stderr, "cloudundo:", err)
-		return 1
-	}
-	if !ok {
-		fmt.Fprintf(stderr, "cloudundo undo: no entry #%d (see cloudundo log)\n", id)
-		return 1
-	}
-	fmt.Fprintf(stderr, "cloudundo undo: #%d (%s) was only recorded, not protected. Undo arrives with protections in the next build days.\n", e.ID, e.Command)
-	return 3
 }
 
 func openJournal() (*journal.Journal, error) {

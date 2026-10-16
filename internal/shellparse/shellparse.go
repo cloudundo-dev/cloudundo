@@ -18,6 +18,9 @@ type Simple struct {
 	// Uncertain means some arguments come from somewhere cloudundo cannot
 	// see (a variable, $(...), backticks, xargs input).
 	Uncertain bool
+	// Env holds variables set for this command: inline (AWS_PROFILE=x aws ...),
+	// through env, or by an earlier "export" in the same line.
+	Env map[string]string
 }
 
 // maxDepth bounds bash -c "..." recursion.
@@ -32,8 +35,19 @@ func Split(line string) []Simple {
 func split(line string, depth int) []Simple {
 	var out []Simple
 	cmds, subs := tokenize(line)
+	exported := map[string]string{}
 	for _, raw := range cmds {
-		out = append(out, unwrap(raw, depth)...)
+		for _, s := range unwrap(raw, depth) {
+			s.Env = mergeEnv(exported, s.Env)
+			if len(s.Args) > 0 && s.Args[0] == "export" {
+				for _, a := range s.Args[1:] {
+					if k, v, ok := assignment(a); ok {
+						exported[k] = v
+					}
+				}
+			}
+			out = append(out, s)
+		}
 	}
 	// Commands inside $( ... ) and backticks run too.
 	if depth < maxDepth {
@@ -231,6 +245,12 @@ func isDigits(s string) bool {
 // shell -c strings.
 func unwrap(ws []word, depth int) []Simple {
 	uncertain := false
+	env := map[string]string{}
+	setEnv := func(w string) {
+		if k, v, ok := assignment(w); ok {
+			env[k] = v
+		}
+	}
 	i := 0
 	for i < len(ws) {
 		w := ws[i].text
@@ -239,6 +259,7 @@ func unwrap(ws []word, depth int) []Simple {
 			// "do aws s3 rm ..." inside a loop, "if aws ...", "! aws ...".
 			i++
 		case isAssignment(w):
+			setEnv(w)
 			i++
 		case base(w) == "sudo" || base(w) == "doas":
 			i++
@@ -251,6 +272,7 @@ func unwrap(ws []word, depth int) []Simple {
 		case base(w) == "env":
 			i++
 			for i < len(ws) && (strings.HasPrefix(ws[i].text, "-") || isAssignment(ws[i].text)) {
+				setEnv(ws[i].text)
 				i++
 			}
 		case base(w) == "time" || base(w) == "command" || base(w) == "exec" || base(w) == "nohup":
@@ -283,8 +305,9 @@ func unwrap(ws []word, depth int) []Simple {
 				if strings.Contains(ws[j].text, "c") && !strings.HasPrefix(ws[j].text, "--") {
 					if j+1 < len(ws) && depth < maxDepth {
 						inner := split(ws[j+1].text, depth+1)
-						if uncertain || ws[j+1].uncertain {
-							for k := range inner {
+						for k := range inner {
+							inner[k].Env = mergeEnv(env, inner[k].Env)
+							if uncertain || ws[j+1].uncertain {
 								inner[k].Uncertain = true
 							}
 						}
@@ -293,19 +316,22 @@ func unwrap(ws []word, depth int) []Simple {
 				}
 				j++
 			}
-			return wordsToSimple(ws[i:], uncertain)
+			return wordsToSimple(ws[i:], uncertain, env)
 		default:
-			return wordsToSimple(ws[i:], uncertain)
+			return wordsToSimple(ws[i:], uncertain, env)
 		}
 	}
 	return nil
 }
 
-func wordsToSimple(ws []word, uncertain bool) []Simple {
+func wordsToSimple(ws []word, uncertain bool, env map[string]string) []Simple {
 	if len(ws) == 0 {
 		return nil
 	}
 	s := Simple{Uncertain: uncertain}
+	if len(env) > 0 {
+		s.Env = env
+	}
 	for _, w := range ws {
 		s.Args = append(s.Args, w.text)
 		if w.uncertain {
@@ -320,6 +346,30 @@ var shellKeywords = map[string]bool{
 	"do": true, "then": true, "else": true, "elif": true, "if": true,
 	"while": true, "until": true, "!": true, "{": true, "}": true,
 	"done": true, "fi": true,
+}
+
+// assignment splits NAME=value.
+func assignment(w string) (string, string, bool) {
+	if !isAssignment(w) {
+		return "", "", false
+	}
+	eq := strings.IndexByte(w, '=')
+	return w[:eq], w[eq+1:], true
+}
+
+// mergeEnv returns base overlaid with top, or nil when both are empty.
+func mergeEnv(base, top map[string]string) map[string]string {
+	if len(base) == 0 && len(top) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(top))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range top {
+		out[k] = v
+	}
+	return out
 }
 
 func isAssignment(w string) bool {

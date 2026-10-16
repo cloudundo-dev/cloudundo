@@ -5,6 +5,27 @@ import (
 	"testing"
 )
 
+func TestEnv(t *testing.T) {
+	tests := []struct {
+		line string
+		want map[string]string // env of the last command
+	}{
+		{"AWS_PROFILE=prod aws s3 rm s3://b/k", map[string]string{"AWS_PROFILE": "prod"}},
+		{"env AWS_REGION=eu-west-1 aws s3 rm s3://b/k", map[string]string{"AWS_REGION": "eu-west-1"}},
+		{"export AWS_PROFILE=prod && aws s3 rm s3://b/k", map[string]string{"AWS_PROFILE": "prod"}},
+		{"export AWS_PROFILE=a; AWS_PROFILE=b aws s3 rm s3://b/k", map[string]string{"AWS_PROFILE": "b"}},
+		{`AWS_PROFILE=x bash -c "aws s3 rm s3://b/k"`, map[string]string{"AWS_PROFILE": "x"}},
+		{"aws s3 rm s3://b/k", nil},
+	}
+	for _, tt := range tests {
+		got := Split(tt.line)
+		last := got[len(got)-1]
+		if !reflect.DeepEqual(last.Env, tt.want) {
+			t.Errorf("Split(%q) env = %v, want %v", tt.line, last.Env, tt.want)
+		}
+	}
+}
+
 func TestSplit(t *testing.T) {
 	tests := []struct {
 		name      string
