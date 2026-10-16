@@ -23,6 +23,26 @@ type version struct {
 	at     time.Time
 }
 
+type table struct {
+	arn        string
+	status     string
+	keyAttrs   []string
+	items      map[string]string // canonical key -> item JSON
+	ttl        string
+	tags       []map[string]string
+	pitr       bool
+	stream     string
+	protection bool
+	// creatingPolls is how many more describe-table calls report CREATING.
+	creatingPolls int
+}
+
+type backup struct {
+	table *table
+	name  string
+	polls int // describe-backup calls left before AVAILABLE
+}
+
 type bucket struct {
 	region     string
 	versioning string // "", "Enabled", "Suspended"
@@ -34,9 +54,15 @@ type bucket struct {
 type Fake struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket
-	clock   time.Time
-	nextID  int
-	Account string
+	tables  map[string]*table
+	backups map[string]*backup
+	// BackupPolls is how many describe-backup calls report CREATING for a
+	// new backup; RestorePolls the same for a restored table.
+	BackupPolls  int
+	RestorePolls int
+	clock        time.Time
+	nextID       int
+	Account      string
 	// Calls records every call, global flags removed.
 	Calls [][]string
 	// Env records the extra environment of every call.
@@ -49,6 +75,8 @@ type Fake struct {
 func New() *Fake {
 	return &Fake{
 		buckets: map[string]*bucket{},
+		tables:  map[string]*table{},
+		backups: map[string]*backup{},
 		clock:   time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC),
 		Account: "123456789012",
 		Fail:    map[string]string{},
@@ -205,9 +233,12 @@ func (f *Fake) Run(_ context.Context, env []string, args ...string) ([]byte, err
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if strings.HasPrefix(a, "--") && a != "--only-show-errors" {
-			if i+1 < len(args) {
-				flags[strings.TrimPrefix(a, "--")] = args[i+1]
+			name := strings.TrimPrefix(a, "--")
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				flags[name] = args[i+1]
 				i++
+			} else {
+				flags[name] = "true" // a boolean flag
 			}
 			continue
 		}
@@ -229,6 +260,9 @@ func (f *Fake) Run(_ context.Context, env []string, args ...string) ([]byte, err
 	js := func(v any) ([]byte, error) { return json.Marshal(v) }
 	if len(clean) < 2 {
 		return errOut("usage")
+	}
+	if clean[0] == "dynamodb" {
+		return f.dynamo(clean[1], flags, args)
 	}
 	name := flags["bucket"]
 	b := f.buckets[name]

@@ -1,10 +1,10 @@
-// Package s3effects reads an aws CLI invocation and reports what it would
+// Package effects reads an aws CLI invocation and reports what it would
 // do to S3 data: delete objects, delete a bucket, overwrite objects, or
 // weaken the protections cloudundo relies on.
 //
 // It only reads the command; it never calls AWS. Deciding how to protect
 // each effect is a separate step.
-package s3effects
+package effects
 
 import (
 	"encoding/json"
@@ -31,10 +31,17 @@ const (
 	WeakenProtection Kind = "weaken-protection"
 )
 
-// Effect is one change to S3 data.
+// Effect is one change to S3 or DynamoDB data.
 type Effect struct {
-	Kind   Kind   `json:"kind"`
-	Bucket string `json:"bucket,omitempty"`
+	Kind Kind `json:"kind"`
+	// Service is "s3" or "dynamodb".
+	Service string `json:"service"`
+	Bucket  string `json:"bucket,omitempty"`
+	// Table is the DynamoDB table.
+	Table string `json:"table,omitempty"`
+	// Items are DynamoDB JSON objects: keys, or whole items when FullItems.
+	Items     []string `json:"items,omitempty"`
+	FullItems bool     `json:"full_items,omitempty"`
 	// Key is set when exactly one object is affected.
 	Key string `json:"key,omitempty"`
 	// Prefix is set when everything under it may be affected ("" = whole bucket).
@@ -80,11 +87,15 @@ func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect 
 	}
 
 	var effs []Effect
+	service := "s3"
 	switch p.pos[0] {
 	case "s3":
 		effs = highLevel(p)
 	case "s3api":
 		effs = lowLevel(p)
+	case "dynamodb":
+		service = "dynamodb"
+		effs = dynamo(p)
 	}
 	conn := awscli.ConnFromEnv(env)
 	conn.Profile = p.value("profile")
@@ -96,7 +107,11 @@ func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect 
 		if uncertain {
 			effs[i].Uncertain = true
 		}
-		if effs[i].Bucket == "" {
+		effs[i].Service = service
+		if service == "s3" && effs[i].Bucket == "" {
+			effs[i].Uncertain = true
+		}
+		if service == "dynamodb" && !validTable(effs[i].Table) {
 			effs[i].Uncertain = true
 		}
 	}
@@ -372,6 +387,8 @@ var booleanFlags = map[string]bool{
 	"force-glacier-transfer": true, "bypass-governance-retention": true,
 	"no-bypass-governance-retention": true, "no-cli-pager": true,
 	"cli-auto-prompt": true, "no-cli-auto-prompt": true,
+	"deletion-protection-enabled": true, "no-deletion-protection-enabled": true,
+	"consistent-read": true, "no-consistent-read": true,
 }
 
 // s3apiValueFlags are s3api flags whose name collides with a boolean

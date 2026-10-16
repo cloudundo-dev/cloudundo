@@ -7,9 +7,9 @@ import (
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
 	"github.com/cloudundo/cloudundo/internal/awstest"
+	"github.com/cloudundo/cloudundo/internal/effects"
 	"github.com/cloudundo/cloudundo/internal/journal"
 	"github.com/cloudundo/cloudundo/internal/protect"
-	"github.com/cloudundo/cloudundo/internal/s3effects"
 )
 
 type world struct {
@@ -28,7 +28,7 @@ func (w *world) protect(line string) journal.Entry {
 	w.t.Helper()
 	cfg := protect.Defaults()
 	cfg.Now = w.f.Now
-	r := protect.Run(context.Background(), s3effects.Analyze(line), w.cf, cfg)
+	r := protect.Run(context.Background(), effects.Analyze(line), w.cf, cfg)
 	if !r.Allowed {
 		w.t.Fatalf("%q blocked: %v", line, r.Blocked)
 	}
@@ -37,7 +37,7 @@ func (w *world) protect(line string) journal.Entry {
 
 func (w *world) undo(e journal.Entry) Plan {
 	w.t.Helper()
-	p, err := For(context.Background(), e, w.cf)
+	p, err := For(context.Background(), &e, w.cf, w.t.TempDir())
 	if err != nil {
 		w.t.Fatalf("plan: %v", err)
 	}
@@ -229,14 +229,15 @@ func TestMissingBackupIsAnError(t *testing.T) {
 	e := w.protect("aws s3 rb s3://b --force")
 	w.f.RemoveBucket("b")
 	w.f.RemoveBucket(e.Undo[0].BackupBucket)
-	if _, err := For(context.Background(), e, w.cf); err == nil || !strings.Contains(err.Error(), "is gone") {
+	if _, err := For(context.Background(), &e, w.cf, w.t.TempDir()); err == nil || !strings.Contains(err.Error(), "is gone") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestNothingToUndo(t *testing.T) {
 	w := newWorld(t)
-	p, err := For(context.Background(), journal.Entry{ID: 4, Status: "blocked"}, w.cf)
+	blocked := journal.Entry{ID: 4, Status: "blocked"}
+	p, err := For(context.Background(), &blocked, w.cf, "")
 	if err != nil || !strings.Contains(p.Summary(), "was blocked") {
 		t.Fatalf("%v %s", err, p.Summary())
 	}
@@ -249,7 +250,7 @@ func TestApplyStopsAtFirstFailure(t *testing.T) {
 	w.f.Put("b", "y", "Y")
 	e := w.protect("aws s3 rm s3://b --recursive")
 	w.f.DeletePrefix("b", "")
-	p, err := For(context.Background(), e, w.cf)
+	p, err := For(context.Background(), &e, w.cf, w.t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

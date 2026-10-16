@@ -30,6 +30,9 @@ type Plan struct {
 	Actions []Action
 	// Notes explain what will be left as it is, and why.
 	Notes []string
+	// Pending means undo is not finished after these actions (a table is
+	// still being restored); running undo again later completes it.
+	Pending bool
 }
 
 // Apply runs the actions in order and stops at the first failure.
@@ -43,8 +46,11 @@ func (p Plan) Apply(ctx context.Context) (int, error) {
 	return len(p.Actions), nil
 }
 
-// For builds the plan for an entry without changing anything.
-func For(ctx context.Context, e journal.Entry, clientFor ClientFor) (Plan, error) {
+// For builds the plan for an entry without changing anything. Applying
+// the plan may record progress in e (a restored table's ARN), so callers
+// should save e afterwards. dataDir is where undo may save the current
+// values of DynamoDB items before putting older ones back.
+func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir string) (Plan, error) {
 	var p Plan
 	if len(e.Undo) == 0 {
 		switch e.Status {
@@ -60,14 +66,19 @@ func For(ctx context.Context, e journal.Entry, clientFor ClientFor) (Plan, error
 	if e.Status == "undone" {
 		p.Notes = append(p.Notes, fmt.Sprintf("#%d was already undone; running it again only restores what changed since.", e.ID))
 	}
-	for _, s := range e.Undo {
+	for i := range e.Undo {
+		s := &e.Undo[i]
 		c := clientFor(s.Conn)
 		var err error
 		switch s.Kind {
 		case "s3-versions":
-			err = planVersions(ctx, c, s, &p)
+			err = planVersions(ctx, c, *s, &p)
 		case "s3-bucket-copy":
-			err = planBucket(ctx, c, s, &p)
+			err = planBucket(ctx, c, *s, &p)
+		case "ddb-items":
+			err = planItems(ctx, c, *s, &p, dataDir, e.ID)
+		case "ddb-table-backup":
+			err = planTable(ctx, c, s, &p)
 		default:
 			err = fmt.Errorf("unknown undo step %q (journal from a newer cloudundo?)", s.Kind)
 		}

@@ -13,16 +13,16 @@ import (
 	"time"
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/s3effects"
+	"github.com/cloudundo/cloudundo/internal/effects"
 )
 
 // Entry is one recorded command.
 type Entry struct {
-	ID      int                `json:"id"`
-	Time    time.Time          `json:"time"`
-	Command string             `json:"command"`
-	Agent   string             `json:"agent,omitempty"`
-	Effects []s3effects.Effect `json:"effects"`
+	ID      int              `json:"id"`
+	Time    time.Time        `json:"time"`
+	Command string           `json:"command"`
+	Agent   string           `json:"agent,omitempty"`
+	Effects []effects.Effect `json:"effects"`
 	// Protection lists what cloudundo did before the command ran.
 	Protection []string `json:"protection,omitempty"`
 	// Notes are things the user should know (costs, undo windows).
@@ -51,6 +51,36 @@ type UndoStep struct {
 	BackupBucket string      `json:"backup_bucket,omitempty"`
 	BackupPrefix string      `json:"backup_prefix,omitempty"`
 	Conn         awscli.Conn `json:"conn"`
+
+	// DynamoDB: "ddb-items" keeps the items as they were in ItemsFile;
+	// "ddb-table-backup" keeps an on-demand backup and the table settings
+	// a restore does not bring back.
+	Table       string       `json:"table,omitempty"`
+	ItemsFile   string       `json:"items_file,omitempty"`
+	BackupArn   string       `json:"backup_arn,omitempty"`
+	TableConfig *TableConfig `json:"table_config,omitempty"`
+	// RestoredArn is set once undo has restored the table, so a later
+	// undo run can finish putting its settings back.
+	RestoredArn     string `json:"restored_arn,omitempty"`
+	SettingsApplied bool   `json:"settings_applied,omitempty"`
+}
+
+// TableConfig is the part of a DynamoDB table a backup restore leaves out.
+type TableConfig struct {
+	TTLAttribute       string       `json:"ttl_attribute,omitempty"`
+	Tags               []awscli.Tag `json:"tags,omitempty"`
+	PITR               bool         `json:"pitr,omitempty"`
+	StreamViewType     string       `json:"stream_view_type,omitempty"`
+	DeletionProtection bool         `json:"deletion_protection,omitempty"`
+	// Unread lists settings that could not be read, so undo cannot restore them.
+	Unread []string `json:"unread,omitempty"`
+}
+
+// SavedItem is one DynamoDB item as it was before a command. Item is
+// null when there was no item with that key.
+type SavedItem struct {
+	Key  json.RawMessage `json:"key"`
+	Item json.RawMessage `json:"item"`
 }
 
 // Journal is an append-only JSON-lines file.

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo/cloudundo/internal/effects"
 	"github.com/cloudundo/cloudundo/internal/journal"
 	"github.com/cloudundo/cloudundo/internal/protect"
-	"github.com/cloudundo/cloudundo/internal/s3effects"
 	"github.com/cloudundo/cloudundo/internal/undo"
 )
 
@@ -69,8 +69,8 @@ func cmdProtect(args []string, stdout, stderr io.Writer) int {
 		return exitBlock
 	}
 
-	effects := s3effects.Analyze(line)
-	if len(effects) == 0 {
+	effs := effects.Analyze(line)
+	if len(effs) == 0 {
 		if *asJSON {
 			fmt.Fprintln(stdout, `{"allowed":true,"effects":[]}`)
 		}
@@ -80,18 +80,23 @@ func cmdProtect(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return blockWith(err.Error())
 	}
-	j, err := openJournal()
+	dir, err := journal.DefaultDir()
+	if err != nil {
+		return blockWith("cannot find the journal folder: " + err.Error())
+	}
+	j, err := journal.Open(dir)
 	if err != nil {
 		return blockWith("cannot open the journal: " + err.Error())
 	}
+	cfg.DataDir = dir
 
-	r := protect.Run(context.Background(), effects, clientFor(newRunner()), cfg)
+	r := protect.Run(context.Background(), effs, clientFor(newRunner()), cfg)
 	status := "protected"
 	if !r.Allowed {
 		status = "blocked"
 	}
 	entry, err := j.Append(journal.Entry{
-		Time: now().UTC(), Command: line, Effects: effects,
+		Time: now().UTC(), Command: line, Effects: effs,
 		Protection: r.Protection, Notes: r.Notes, Blocked: r.Blocked, Undo: r.Undo, Status: status,
 	})
 	if err != nil {
@@ -163,8 +168,13 @@ func cmdUndo(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	dir, err := journal.DefaultDir()
+	if err != nil {
+		fmt.Fprintln(stderr, "cloudundo:", err)
+		return 1
+	}
 	ctx := context.Background()
-	plan, err := undo.For(ctx, e, clientFor(newRunner()))
+	plan, err := undo.For(ctx, &e, clientFor(newRunner()), dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "cloudundo undo #%d: %v\n", id, err)
 		return 1
@@ -172,6 +182,10 @@ func cmdUndo(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "#%d: %s\n", e.ID, e.Command)
 	if len(plan.Actions) == 0 {
 		fmt.Fprint(stdout, plan.Summary())
+		if plan.Pending {
+			fmt.Fprintln(stdout, "Still in progress; nothing to do right now.")
+			return 0
+		}
 		fmt.Fprintln(stdout, "Nothing to restore.")
 		return 0
 	}
@@ -182,14 +196,27 @@ func cmdUndo(args []string, stdout, stderr io.Writer) int {
 	}
 
 	n, err := plan.Apply(ctx)
+	// Save progress either way: a started table restore must be remembered.
 	if err != nil {
+		if uerr := j.Update(e); uerr != nil {
+			fmt.Fprintln(stderr, "cloudundo: could not save progress to the journal:", uerr)
+		}
 		fmt.Fprintf(stderr, "cloudundo undo #%d: stopped after %d of %d steps: %v\n", id, n, len(plan.Actions), err)
 		fmt.Fprintln(stderr, "Nothing was deleted. Fix the problem and run the same command again.")
 		return 1
 	}
-	e.Status = "undone"
+	if !plan.Pending {
+		e.Status = "undone"
+	}
 	if err := j.Update(e); err != nil {
-		fmt.Fprintln(stderr, "cloudundo: restored, but could not mark the journal:", err)
+		fmt.Fprintln(stderr, "cloudundo: restored, but could not save to the journal:", err)
+		if plan.Pending {
+			return 1
+		}
+	}
+	if plan.Pending {
+		fmt.Fprintf(stdout, "Started (%d steps). Run `cloudundo undo %d --yes` again in a few minutes to finish.\n", n, id)
+		return 0
 	}
 	fmt.Fprintf(stdout, "Restored (%d steps).\n", n)
 	return 0

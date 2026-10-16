@@ -1,7 +1,8 @@
 // Command cloudundo makes what an AI agent deletes in AWS recoverable.
 //
-// "protect" runs before an agent's command: it makes the command's S3
-// changes recoverable, or blocks the command. "undo" puts the data back.
+// "protect" runs before an agent's command: it makes the command's S3 and
+// DynamoDB changes recoverable, or blocks the command. "undo" puts the
+// data back.
 package main
 
 import (
@@ -12,8 +13,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudundo/cloudundo/internal/effects"
 	"github.com/cloudundo/cloudundo/internal/journal"
-	"github.com/cloudundo/cloudundo/internal/s3effects"
 )
 
 var version = "0.0.1-dev"
@@ -25,7 +26,7 @@ func main() {
 const usage = `cloudundo: make what your AI agent deletes in AWS recoverable.
 
 Usage:
-  cloudundo protect [--json] -- <command>   make the command's S3 changes recoverable, or block it
+  cloudundo protect [--json] -- <command>   make the command's AWS data changes recoverable, or block it
                                            exit 0: safe to run   exit 2: do not run
   cloudundo undo <id> [--yes]               show what undo would restore; --yes restores it
   cloudundo log [--json]                    list recorded commands
@@ -79,15 +80,15 @@ func cmdCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	effects := s3effects.Analyze(line)
+	effs := effects.Analyze(line)
 
-	if *record && len(effects) > 0 {
+	if *record && len(effs) > 0 {
 		j, err := openJournal()
 		if err != nil {
 			fmt.Fprintln(stderr, "cloudundo:", err)
 			return 1
 		}
-		e, err := j.Append(journal.Entry{Command: line, Effects: effects, Status: "seen"})
+		e, err := j.Append(journal.Entry{Command: line, Effects: effs, Status: "seen"})
 		if err != nil {
 			fmt.Fprintln(stderr, "cloudundo:", err)
 			return 1
@@ -98,23 +99,23 @@ func cmdCheck(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *asJSON {
-		if effects == nil {
-			effects = []s3effects.Effect{}
+		if effs == nil {
+			effs = []effects.Effect{}
 		}
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
-		if err := enc.Encode(effects); err != nil {
+		if err := enc.Encode(effs); err != nil {
 			fmt.Fprintln(stderr, "cloudundo:", err)
 			return 1
 		}
 		return 0
 	}
 
-	if len(effects) == 0 {
-		fmt.Fprintln(stdout, "No S3 data changes found.")
+	if len(effs) == 0 {
+		fmt.Fprintln(stdout, "No S3 or DynamoDB data changes found.")
 		return 0
 	}
-	for _, e := range effects {
+	for _, e := range effs {
 		fmt.Fprintln(stdout, describe(e))
 	}
 	return 0
@@ -169,26 +170,44 @@ func openJournal() (*journal.Journal, error) {
 	return journal.Open(dir)
 }
 
-func describe(e s3effects.Effect) string {
+func describe(e effects.Effect) string {
 	var verb string
 	switch e.Kind {
-	case s3effects.DeleteObjects:
+	case effects.DeleteObjects:
 		verb = "DELETE    "
-	case s3effects.DeleteBucket:
+	case effects.DeleteBucket:
 		verb = "DELETE BUCKET"
-	case s3effects.OverwriteObjects:
+	case effects.OverwriteObjects:
 		verb = "OVERWRITE "
-	case s3effects.WeakenProtection:
+	case effects.WeakenProtection:
 		verb = "WEAKEN    "
+	case effects.DeleteTable:
+		verb = "DELETE TABLE"
+	case effects.DeleteItems:
+		verb = "DELETE    "
+	case effects.OverwriteItems:
+		verb = "OVERWRITE "
 	default:
 		verb = string(e.Kind)
 	}
 
-	target := "s3://" + e.Bucket
-	if e.Bucket == "" {
+	var target string
+	switch {
+	case e.Service == "dynamodb":
+		target = "dynamodb:" + e.Table
+		if e.Table == "" || e.Table == "?" {
+			target = "dynamodb:<unknown table>"
+		}
+		if n := len(e.Items); n > 0 {
+			target += fmt.Sprintf(" (%d item(s))", n)
+		}
+	case e.Bucket == "":
 		target = "s3://<unknown bucket>"
+	default:
+		target = "s3://" + e.Bucket
 	}
 	switch {
+	case e.Service == "dynamodb":
 	case e.Key != "":
 		target += "/" + e.Key
 	case e.Recursive:

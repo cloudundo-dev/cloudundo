@@ -4,7 +4,7 @@
 
 cloudundo sits in front of the AWS commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3 or DynamoDB, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back.
 
-> **Status: early development, S3 only.** Protection and `undo` for S3 work and are tested against a simulated S3, but have not yet been run against real AWS. DynamoDB and the agent hooks come next. Try it on a test bucket, not production data.
+> **Status: early development.** Protection and `undo` for S3 and DynamoDB work and are tested against a simulated AWS, but have not yet been run against real AWS. The agent hooks come next. Try it on a test account, not production data.
 
 ## Why
 
@@ -29,8 +29,11 @@ Exit code 0 means the command is safe to run. Exit code 2 means it must not run:
 | --- | --- | --- |
 | delete or overwrite objects | turns on bucket versioning if it is off | removes the delete markers, or copies the earlier version back |
 | delete a whole bucket (`rb --force`) | copies it (up to 5 GB) to a private backup bucket and checks the copy | recreates the bucket and copies the objects back |
+| delete a DynamoDB table | makes an on-demand backup, waits until it is ready, and records the table's settings | restores the table under the same name, then puts back its TTL, tags, stream, point-in-time recovery and deletion protection |
+| delete or change DynamoDB items (`delete-item`, `put-item`, `update-item`, `batch-write-item`, up to 100 items) | reads each item and saves it | saves the items' current values, then puts the old ones back |
 | target something it cannot read (`$VAR`, `xargs`, `file://`) | blocks it | |
 | suspend versioning, change lifecycle rules, or touch the backup bucket | blocks it | |
+| run PartiQL or transactions, turn off deletion protection or point-in-time recovery, turn on TTL, or delete a backup | blocks it | |
 
 ```sh
 cloudundo undo 1        # shows what it would restore; changes nothing
@@ -40,10 +43,11 @@ cloudundo log           # everything cloudundo saw
 
 Things to know:
 
-- **Undo never deletes data.** It only removes delete markers or copies an older version on top, so an undo can be undone too.
+- **Undo never deletes data.** In S3 it only removes delete markers or copies an older version on top. In DynamoDB it saves the current value of an item before putting the old one back, and leaves items the command created. So an undo can be undone too.
 - **Versioning is permanent.** Once on, it can be suspended but not removed.
 - **The 7-day expiry rule** is added only to buckets that were never versioned, so old versions you chose to keep are never expired. Existing lifecycle rules are kept as they are.
 - **Restored buckets come back private**, with their objects but not their old policy, website, CORS or tags.
+- **Restoring a DynamoDB table takes minutes.** The first `undo --yes` starts it; run the same command again once it is done to put the settings back. Auto scaling, alarms and IAM policies are not restored. On-demand backups are kept until you delete them, and AWS bills for their storage.
 - cloudundo calls your own `aws` CLI with the same profile, region and environment as the agent's command. Inline access keys are used but never written to disk.
 - Undo puts each key back to how it was just before the command, using your computer's clock. If an app writes to the same keys after the command, undo will roll those writes back too, which is why it shows a preview first.
 
@@ -58,6 +62,10 @@ Things to know:
 | `aws s3 mv` | delete at the source, overwrite at the destination |
 | `aws s3 cp` / `sync` to S3, `s3api put-object`, `copy-object` | overwrite (and delete with `sync --delete`) |
 | suspending versioning, lifecycle rules | weakens protection |
+| `aws dynamodb delete-table` | delete table |
+| `delete-item`, `put-item`, `update-item`, `batch-write-item` | delete or overwrite items |
+| `execute-statement`, `transact-write-items` and other PartiQL or transactions | not readable, blocked |
+| `update-table` turning off deletion protection, `update-continuous-backups` turning off recovery, `update-time-to-live` turning on TTL, `delete-backup` | weakens protection |
 
 ### Settings
 
@@ -71,7 +79,7 @@ Things to know:
 ## Roadmap
 
 1. ~~S3: versioning before object deletes, bucket copies before bucket deletes, `undo`.~~ Done.
-2. DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.
+2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
 3. Hooks for Claude Code, Cursor and Codex, failing closed.
 4. Real-AWS tests for every case before the first release.
 
@@ -81,7 +89,7 @@ Things to know:
 go build ./cmd/cloudundo
 go vet ./...
 go test -race ./...
-go test -run=^$ -fuzz=FuzzAnalyze -fuzztime=60s ./internal/s3effects
+go test -run=^$ -fuzz=FuzzAnalyze -fuzztime=60s ./internal/effects
 ```
 
 No dependencies outside the Go standard library.

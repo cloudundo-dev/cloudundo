@@ -3,7 +3,7 @@ package journal
 import (
 	"testing"
 
-	"github.com/cloudundo/cloudundo/internal/s3effects"
+	"github.com/cloudundo/cloudundo/internal/effects"
 )
 
 func TestAppendListGet(t *testing.T) {
@@ -18,7 +18,7 @@ func TestAppendListGet(t *testing.T) {
 	}
 
 	e1, err := j.Append(Entry{Command: "aws s3 rm s3://b/k", Status: "seen",
-		Effects: []s3effects.Effect{{Kind: s3effects.DeleteObjects, Bucket: "b", Key: "k"}}})
+		Effects: []effects.Effect{{Kind: effects.DeleteObjects, Bucket: "b", Key: "k"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

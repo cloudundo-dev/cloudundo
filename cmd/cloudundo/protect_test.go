@@ -116,3 +116,62 @@ func TestRetentionSetting(t *testing.T) {
 		t.Fatalf("lifecycle = %s", f.Lifecycle("b"))
 	}
 }
+
+func TestProtectThenUndoDynamoDBTable(t *testing.T) {
+	f := withFake(t)
+	f.CreateTable("Users", "pk")
+	f.SetTableSettings("Users", "expires", map[string]string{"team": "core"}, true, "")
+	f.PutItem("Users", `{"pk":{"S":"u1"}}`)
+
+	code, out, errOut := runCLI(t, "check", "--", "aws dynamodb delete-table --table-name Users")
+	if code != 0 || !strings.Contains(out, "DELETE TABLE dynamodb:Users") {
+		t.Fatalf("check: %d\n%s%s", code, out, errOut)
+	}
+	code, out, errOut = runCLI(t, "protect", "--", "aws dynamodb delete-table --table-name Users")
+	if code != 0 || !strings.Contains(out, "on-demand backup") {
+		t.Fatalf("protect: %d\n%s%s", code, out, errOut)
+	}
+	f.DropTable("Users")
+
+	code, out, errOut = runCLI(t, "undo", "1", "--yes")
+	if code != 0 || !strings.Contains(out, "again in a few minutes") || !f.HasTable("Users") {
+		t.Fatalf("undo run 1: %d\n%s%s", code, out, errOut)
+	}
+	if _, out, _ := runCLI(t, "log"); strings.Contains(out, "undone") {
+		t.Fatalf("marked undone before settings came back:\n%s", out)
+	}
+
+	code, out, errOut = runCLI(t, "undo", "1", "--yes")
+	if code != 0 || !strings.Contains(out, "Restored") {
+		t.Fatalf("undo run 2: %d\n%s%s", code, out, errOut)
+	}
+	if ttl, tags, pitr, _ := f.TableSettings("Users"); ttl != "expires" || tags["team"] != "core" || !pitr {
+		t.Fatalf("settings not back: %q %v %v", ttl, tags, pitr)
+	}
+	if f.Item("Users", `{"pk":{"S":"u1"}}`) == "" {
+		t.Fatal("item not back")
+	}
+	if _, out, _ := runCLI(t, "log"); !strings.Contains(out, "undone") {
+		t.Fatalf("log:\n%s", out)
+	}
+	if code, out, _ := runCLI(t, "undo", "1", "--yes"); code != 0 || !strings.Contains(out, "Nothing to restore") {
+		t.Fatalf("undo run 3: %d\n%s", code, out)
+	}
+}
+
+func TestProtectThenUndoDynamoDBItem(t *testing.T) {
+	f := withFake(t)
+	f.CreateTable("Users", "pk")
+	f.PutItem("Users", `{"pk":{"S":"u1"},"n":{"N":"1"}}`)
+	line := `aws dynamodb delete-item --table-name Users --key '{"pk":{"S":"u1"}}'`
+	if code, out, errOut := runCLI(t, "protect", "--", line); code != 0 {
+		t.Fatalf("protect: %d\n%s%s", code, out, errOut)
+	}
+	f.DeleteItem("Users", `{"pk":{"S":"u1"}}`)
+	if code, out, errOut := runCLI(t, "undo", "1", "--yes"); code != 0 || !strings.Contains(out, "Restored (1 steps)") {
+		t.Fatalf("undo: %d\n%s%s", code, out, errOut)
+	}
+	if got := f.Item("Users", `{"pk":{"S":"u1"}}`); !strings.Contains(got, `"N":"1"`) {
+		t.Fatalf("item = %s", got)
+	}
+}

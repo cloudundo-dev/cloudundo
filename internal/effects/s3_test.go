@@ -1,4 +1,4 @@
-package s3effects
+package effects
 
 import (
 	"reflect"
@@ -12,6 +12,7 @@ func strip(effs []Effect) []Effect {
 	for i := range effs {
 		effs[i].Command = ""
 		effs[i].Conn = awscli.Conn{}
+		effs[i].Service = ""
 	}
 	return effs
 }

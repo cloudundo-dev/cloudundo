@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo/cloudundo/internal/effects"
 	"github.com/cloudundo/cloudundo/internal/journal"
-	"github.com/cloudundo/cloudundo/internal/s3effects"
 )
 
 // Config tunes protection.
@@ -25,11 +25,19 @@ type Config struct {
 	// MaxCopyBytes is the largest bucket copied before a bucket delete.
 	MaxCopyBytes int64
 	Now          func() time.Time
+	// DataDir is where saved DynamoDB items are written (the journal dir).
+	DataDir string
+	// BackupWait is how long to wait for a DynamoDB backup to be ready.
+	BackupWait time.Duration
+	Sleep      func(time.Duration)
+	// MaxItems is the most DynamoDB items saved one by one per command.
+	MaxItems int
 }
 
-// Defaults: 7 days, 5 GiB.
+// Defaults: 7 days, 5 GiB, wait up to 60 s for a table backup, 100 items.
 func Defaults() Config {
-	return Config{RetentionDays: 7, MaxCopyBytes: 5 << 30, Now: time.Now}
+	return Config{RetentionDays: 7, MaxCopyBytes: 5 << 30, Now: time.Now,
+		BackupWait: 60 * time.Second, Sleep: time.Sleep, MaxItems: 100}
 }
 
 // Result is the outcome for one command.
@@ -51,14 +59,14 @@ const ExpiryRuleID = "cloudundo-expire-old-versions"
 const BackupBucketPrefix = "cloudundo-backup-"
 
 // Run protects every effect, or blocks the command.
-func Run(ctx context.Context, effects []s3effects.Effect, clientFor ClientFor, cfg Config) Result {
+func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Config) Result {
 	var r Result
 	since := cfg.Now().UTC()
 
 	// 1. Refuse what cannot be protected before changing anything.
-	for _, e := range effects {
+	for _, e := range effs {
 		switch {
-		case strings.HasPrefix(e.Bucket, BackupBucketPrefix) && e.Kind != s3effects.OverwriteObjects:
+		case strings.HasPrefix(e.Bucket, BackupBucketPrefix) && e.Kind != effects.OverwriteObjects:
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
 				"%q would change s3://%s, where cloudundo keeps its backups. Remove backups yourself, not through an agent.",
 				e.Command, e.Bucket))
@@ -66,10 +74,10 @@ func Run(ctx context.Context, effects []s3effects.Effect, clientFor ClientFor, c
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
 				"cannot tell exactly what %q would change (%s). Use explicit bucket and key names, or run it yourself.",
 				e.Command, target(e)))
-		case e.Kind == s3effects.WeakenProtection:
+		case e.Kind == effects.WeakenProtection:
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
-				"%q %s, so later deletes on s3://%s could not be undone. Run it yourself if you mean it.",
-				e.Command, e.Detail, e.Bucket))
+				"%q %s, which makes data loss on %s harder or impossible to undo. Run it yourself if you mean it.",
+				e.Command, e.Detail, target(e)))
 		}
 	}
 	if len(r.Blocked) > 0 {
@@ -78,10 +86,11 @@ func Run(ctx context.Context, effects []s3effects.Effect, clientFor ClientFor, c
 
 	// 2. Protect, once per bucket and account.
 	versioned := map[string]bool{}
-	for _, e := range effects {
+	saved := 0
+	for _, e := range effs {
 		c := clientFor(e.Conn)
 		switch e.Kind {
-		case s3effects.DeleteObjects, s3effects.OverwriteObjects:
+		case effects.DeleteObjects, effects.OverwriteObjects:
 			key := e.Conn.Key() + "|" + e.Bucket
 			if !versioned[key] {
 				versioned[key] = true
@@ -93,8 +102,17 @@ func Run(ctx context.Context, effects []s3effects.Effect, clientFor ClientFor, c
 				Kind: "s3-versions", Bucket: e.Bucket, Key: e.Key, Keys: e.Keys,
 				Prefix: e.Prefix, Recursive: e.Recursive, Since: since, Conn: e.Conn,
 			})
-		case s3effects.DeleteBucket:
+		case effects.DeleteBucket:
 			if !r.bucketCopy(ctx, c, e, since, cfg) {
+				return r.fail()
+			}
+		case effects.DeleteTable:
+			if !r.tableBackup(ctx, c, e, since, cfg) {
+				return r.fail()
+			}
+		case effects.DeleteItems, effects.OverwriteItems:
+			saved++
+			if !r.saveItems(ctx, c, e, since, saved, cfg) {
 				return r.fail()
 			}
 		}
@@ -200,7 +218,7 @@ func (r *Result) addExpiry(ctx context.Context, c awscli.Client, bucket string, 
 }
 
 // bucketCopy copies a bucket before it is deleted, and checks the copy.
-func (r *Result) bucketCopy(ctx context.Context, c awscli.Client, e s3effects.Effect, since time.Time, cfg Config) bool {
+func (r *Result) bucketCopy(ctx context.Context, c awscli.Client, e effects.Effect, since time.Time, cfg Config) bool {
 	block := func(format string, a ...any) bool {
 		r.Blocked = append(r.Blocked, fmt.Sprintf(format, a...))
 		return false
@@ -276,7 +294,13 @@ func (r *Result) bucketCopy(ctx context.Context, c awscli.Client, e s3effects.Ef
 	return true
 }
 
-func target(e s3effects.Effect) string {
+func target(e effects.Effect) string {
+	if e.Service == "dynamodb" {
+		if e.Table == "" || e.Table == "?" {
+			return "a DynamoDB table"
+		}
+		return "DynamoDB table " + e.Table
+	}
 	b := e.Bucket
 	if b == "" {
 		b = "<unknown bucket>"

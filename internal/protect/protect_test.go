@@ -7,7 +7,7 @@ import (
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
 	"github.com/cloudundo/cloudundo/internal/awstest"
-	"github.com/cloudundo/cloudundo/internal/s3effects"
+	"github.com/cloudundo/cloudundo/internal/effects"
 )
 
 func setup(t *testing.T) (*awstest.Fake, ClientFor, Config) {
@@ -20,7 +20,7 @@ func setup(t *testing.T) (*awstest.Fake, ClientFor, Config) {
 
 func protect(t *testing.T, f *awstest.Fake, cf ClientFor, cfg Config, line string) Result {
 	t.Helper()
-	return Run(context.Background(), s3effects.Analyze(line), cf, cfg)
+	return Run(context.Background(), effects.Analyze(line), cf, cfg)
 }
 
 func calls(f *awstest.Fake, op string) int {

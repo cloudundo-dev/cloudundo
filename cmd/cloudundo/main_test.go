@@ -25,7 +25,7 @@ func TestCheckRecordLogUndo(t *testing.T) {
 	}
 
 	code, out, _ = runCLI(t, "check", "--", "aws s3 ls")
-	if code != 0 || !strings.Contains(out, "No S3 data changes") {
+	if code != 0 || !strings.Contains(out, "No S3 or DynamoDB data changes") {
 		t.Fatalf("read-only check: %d\n%s", code, out)
 	}
 
