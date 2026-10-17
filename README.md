@@ -62,6 +62,7 @@ Things to know:
 - **The 7-day expiry rule** is added only to buckets that were never versioned, so old versions you chose to keep are never expired. Existing lifecycle rules are kept as they are.
 - **Restored buckets come back private**, with their objects but not their old policy, website, CORS or tags.
 - **Restoring a DynamoDB table takes minutes.** The first `undo --yes` starts it; run the same command again once it is done to put the settings back. Auto scaling, alarms and IAM policies are not restored. On-demand backups are kept until you delete them, and AWS bills for their storage.
+- **A slow or broken network blocks the command instead of hanging.** Each AWS call gets 2 minutes (a bucket copy gets 9), and cloudundo says which call it is waiting for.
 - cloudundo calls your own `aws` CLI with the same profile, region and environment as the agent's command. Inline access keys are used but never written to disk.
 - **The hook sees the command line, not what scripts do.** `./deploy.sh` that calls `aws s3 rm` inside is not seen. cloudundo protects AWS CLI commands the agent types.
 - **Every problem cloudundo can see blocks the command**: bad hook input, an AWS error, a full disk, its own bugs. If the hook program cannot start or times out, Claude Code (v2.1.295+, `onFailure: block`) and Cursor (`failClosed: true`) block too. Codex has no such setting, so there a missing or hung cloudundo lets commands through.

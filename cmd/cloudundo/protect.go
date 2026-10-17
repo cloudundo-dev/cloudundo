@@ -20,8 +20,10 @@ import (
 
 // Swapped in tests.
 var (
-	newRunner = func() awscli.Runner { return awscli.Exec{Bin: os.Getenv("CLOUDUNDO_AWS_BIN")} }
-	now       = time.Now
+	newRunner = func() awscli.Runner {
+		return awscli.Exec{Bin: os.Getenv("CLOUDUNDO_AWS_BIN"), Progress: os.Stderr}
+	}
+	now = time.Now
 )
 
 const exitBlock = 2
@@ -265,9 +267,16 @@ func cmdUndo(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if plan.Pending {
-		fmt.Fprintf(stdout, "Started (%d steps). Run `cloudundo undo %d --yes` again in a few minutes to finish.\n", n, id)
+		fmt.Fprintf(stdout, "Started (%s). Run `cloudundo undo %d --yes` again in a few minutes to finish.\n", steps(n), id)
 		return 0
 	}
-	fmt.Fprintf(stdout, "Restored (%d steps).\n", n)
+	fmt.Fprintf(stdout, "Restored (%s).\n", steps(n))
 	return 0
+}
+
+func steps(n int) string {
+	if n == 1 {
+		return "1 step"
+	}
+	return fmt.Sprintf("%d steps", n)
 }

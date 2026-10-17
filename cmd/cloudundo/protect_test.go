@@ -168,7 +168,7 @@ func TestProtectThenUndoDynamoDBItem(t *testing.T) {
 		t.Fatalf("protect: %d\n%s%s", code, out, errOut)
 	}
 	f.DeleteItem("Users", `{"pk":{"S":"u1"}}`)
-	if code, out, errOut := runCLI(t, "undo", "1", "--yes"); code != 0 || !strings.Contains(out, "Restored (1 steps)") {
+	if code, out, errOut := runCLI(t, "undo", "1", "--yes"); code != 0 || !strings.Contains(out, "Restored (1 step)") {
 		t.Fatalf("undo: %d\n%s%s", code, out, errOut)
 	}
 	if got := f.Item("Users", `{"pk":{"S":"u1"}}`); !strings.Contains(got, `"N":"1"`) {

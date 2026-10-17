@@ -1,11 +1,14 @@
 package awscli
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 // fakeBin writes a shell script standing in for aws.
@@ -61,5 +64,81 @@ func TestSecretsNotSerialized(t *testing.T) {
 	b, _ := jsonMarshal(c)
 	if strings.Contains(string(b), "AWS_SECRET") {
 		t.Fatalf("secret leaked: %s", b)
+	}
+}
+
+func TestExecGivesUpOnAHungCall(t *testing.T) {
+	bin := fakeBin(t, "exec sleep 30\n")
+	start := time.Now()
+	_, err := Exec{Bin: bin, Timeout: 300 * time.Millisecond}.Run(context.Background(), nil, "s3api", "head-bucket")
+	if err == nil || !strings.Contains(err.Error(), "did not answer") {
+		t.Fatalf("err = %v", err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("took %s", d)
+	}
+}
+
+func TestExecGivesSyncMoreTime(t *testing.T) {
+	bin := fakeBin(t, "sleep 0.5; echo ok\n")
+	out, err := Exec{Bin: bin, Timeout: 100 * time.Millisecond, SyncTimeout: 5 * time.Second}.Run(context.Background(), nil, "s3", "sync", "a", "b")
+	if err != nil || strings.TrimSpace(string(out)) != "ok" {
+		t.Fatalf("out %q err %v", out, err)
+	}
+}
+
+func TestExecReportsSlowCalls(t *testing.T) {
+	old := slowAfter
+	slowAfter = 50 * time.Millisecond
+	t.Cleanup(func() { slowAfter = old })
+	bin := fakeBin(t, "sleep 0.4\n")
+	var buf syncBuffer
+	if _, err := (Exec{Bin: bin, Progress: &buf}).Run(context.Background(), nil, "s3", "sync", "s3://a", "s3://b"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "waiting for AWS: aws s3 sync s3://a s3://b") {
+		t.Fatalf("progress = %q", buf.String())
+	}
+
+	buf = syncBuffer{}
+	fast := fakeBin(t, "true\n")
+	if _, err := (Exec{Bin: fast, Progress: &buf}).Run(context.Background(), nil, "sts", "get-caller-identity"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if buf.String() != "" {
+		t.Fatalf("fast call reported: %q", buf.String())
+	}
+}
+
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func TestExecGivesUpEvenIfAChildKeepsRunning(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for WaitDelay")
+	}
+	bin := fakeBin(t, "sleep 30\n") // sh forks sleep, which keeps the pipes open
+	start := time.Now()
+	_, err := Exec{Bin: bin, Timeout: 200 * time.Millisecond}.Run(context.Background(), nil, "sts", "get-caller-identity")
+	if err == nil {
+		t.Fatal("no error")
+	}
+	if d := time.Since(start); d > 15*time.Second {
+		t.Fatalf("took %s", d)
 	}
 }

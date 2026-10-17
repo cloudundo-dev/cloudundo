@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -45,7 +47,24 @@ func Has(err error, s string) bool {
 // Exec runs the real aws binary.
 type Exec struct {
 	Bin string // default "aws"
+	// Timeout bounds one call; a bucket copy (s3 sync) gets SyncTimeout.
+	// Zero means the defaults below.
+	Timeout     time.Duration
+	SyncTimeout time.Duration
+	// Progress, when set, hears about calls that take a while, so a slow
+	// network does not look like a hang.
+	Progress io.Writer
 }
+
+// Defaults for Exec. A hung connection fails (and so blocks the command)
+// instead of waiting forever; the hook timeout in agents is 10 minutes.
+const (
+	DefaultCallTimeout = 2 * time.Minute
+	DefaultSyncTimeout = 9 * time.Minute
+)
+
+// slowAfter is when a call counts as slow; a variable for tests.
+var slowAfter = 5 * time.Second
 
 // Run executes aws with args.
 func (x Exec) Run(ctx context.Context, extraEnv []string, args ...string) ([]byte, error) {
@@ -53,24 +72,79 @@ func (x Exec) Run(ctx context.Context, extraEnv []string, args ...string) ([]byt
 	if bin == "" {
 		bin = "aws"
 	}
+	limit := x.Timeout
+	if limit <= 0 {
+		limit = DefaultCallTimeout
+	}
+	if len(args) >= 2 && args[0] == "s3" && args[1] == "sync" {
+		limit = x.SyncTimeout
+		if limit <= 0 {
+			limit = DefaultSyncTimeout
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(os.Environ(), extraEnv...)
 	// Never let the CLI open a pager or prompt while a hook is waiting.
 	cmd.Env = append(cmd.Env, "AWS_PAGER=", "AWS_CLI_AUTO_PROMPT=off")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
+	// The aws CLI may leave child processes holding its output open after
+	// it is killed; do not wait for them.
+	cmd.WaitDelay = 5 * time.Second
+
+	done := make(chan struct{})
+	var reporting sync.WaitGroup
+	if x.Progress != nil {
+		reporting.Add(1)
+		go func(after time.Duration) {
+			defer reporting.Done()
+			x.report(done, args, after)
+		}(slowAfter)
+	}
 	err := cmd.Run()
+	close(done)
+	reporting.Wait()
 	if err != nil {
 		code := -1
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			code = ee.ExitCode()
-		} else {
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			errb.WriteString(fmt.Sprintf("AWS did not answer within %s; check your network and try again", limit))
+		} else if code == -1 {
 			errb.WriteString(err.Error())
 		}
 		return out.Bytes(), &Error{Args: args, Code: code, Stderr: errb.String()}
 	}
 	return out.Bytes(), nil
+}
+
+// report says which call is slow, then keeps saying it is still waiting.
+func (x Exec) report(done <-chan struct{}, args []string, after time.Duration) {
+	what := "aws " + strings.Join(args, " ")
+	if len(what) > 120 {
+		what = what[:117] + "..."
+	}
+	start := time.Now()
+	t := time.NewTimer(after)
+	defer t.Stop()
+	for first := true; ; first = false {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+		}
+		if first {
+			fmt.Fprintf(x.Progress, "cloudundo: waiting for AWS: %s\n", what)
+		} else {
+			fmt.Fprintf(x.Progress, "cloudundo: still waiting for AWS (%s)\n", time.Since(start).Round(time.Second))
+		}
+		t.Reset(15 * time.Second)
+	}
 }
 
 // Client calls S3 through the CLI for one Conn.
