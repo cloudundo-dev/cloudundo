@@ -32,6 +32,8 @@ Usage:
   cloudundo log [--json]                    list recorded commands
   cloudundo check [--json] -- <command>     only show what a command would change
   cloudundo install <agent> [--write]       set up the hook for claude-code, cursor or codex
+  cloudundo policy [--account ID] [--region R] [--keep-versions]
+                                           print an IAM policy that stops the agent's keys from deleting backups
   cloudundo hook <agent>                    what the agent runs before each shell command (reads JSON on stdin)
   cloudundo version
 
@@ -60,6 +62,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdHook(args[1:], stdout, stderr)
 	case "install":
 		return cmdInstall(args[1:], stdout, stderr)
+	case "policy":
+		return cmdPolicy(args[1:], stdout, stderr)
 	case "version", "--version":
 		fmt.Fprintln(stdout, "cloudundo", version)
 		return 0

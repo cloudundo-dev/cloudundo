@@ -175,3 +175,19 @@ func TestProtectThenUndoDynamoDBItem(t *testing.T) {
 		t.Fatalf("item = %s", got)
 	}
 }
+
+func TestPolicyCommand(t *testing.T) {
+	code, out, errOut := runCLI(t, "policy", "--account", "123456789012", "--region", "eu-west-1")
+	if code != 0 || !strings.HasPrefix(out, "{") || !strings.Contains(out, "cloudundo-backup-123456789012-eu-west-1") {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	if strings.Contains(out, "aws iam") || !strings.Contains(errOut, "put-user-policy") || !strings.Contains(errOut, "LocationConstraint=eu-west-1") {
+		t.Fatalf("instructions must go to stderr only:\n%s", errOut)
+	}
+	if code, _, _ := runCLI(t, "policy", "--account", "12"); code != 2 {
+		t.Fatalf("bad account accepted: %d", code)
+	}
+	if code, out, _ := runCLI(t, "policy"); code != 0 || !strings.Contains(out, "cloudundo-backup-*") {
+		t.Fatalf("default: %d %s", code, out)
+	}
+}

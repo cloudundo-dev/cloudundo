@@ -4,7 +4,15 @@
 
 cloudundo sits in front of the AWS commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3 or DynamoDB, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back.
 
-> **Status: early development.** Protection and `undo` for S3 and DynamoDB work and are tested against a simulated AWS, but have not yet been run against real AWS. The agent hooks are built from each agent's documentation and tested with recorded inputs, not yet inside the agents themselves. Try it on a test account, not production data.
+> **Status: early, v0.1.** Protection and `undo` for S3 and DynamoDB are tested against a simulated AWS and were run by hand on real AWS (object delete, overwrite, bucket delete, a blocked command, DynamoDB item and table delete: all six undone). The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
+
+```text
+you:    "clean up the old test data"
+agent:  aws s3 rm s3://acme-uploads/customers/ --recursive
+        cloudundo: protected #1 — Undo with: cloudundo undo 1
+you:    cloudundo undo 1 --yes
+        Restored (4 steps).
+```
 
 ## Why
 
@@ -12,7 +20,15 @@ AI coding agents have deleted real data: a Codex session reduced a 3 TB S3 bucke
 
 ## Set up
 
-Build it (`go build ./cmd/cloudundo`), put `cloudundo` on your PATH, then add the hook to your agent:
+Install (Linux, macOS, or WSL on Windows). The script checks the download's SHA-256 before installing it to `~/.local/bin`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+```
+
+Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
+
+Then add the hook to your agent:
 
 ```sh
 cloudundo install claude-code --write   # ~/.claude/settings.json
@@ -64,9 +80,33 @@ Things to know:
 - **Restoring a DynamoDB table takes minutes.** The first `undo --yes` starts it; run the same command again once it is done to put the settings back. Auto scaling, alarms and IAM policies are not restored. On-demand backups are kept until you delete them, and AWS bills for their storage.
 - **A slow or broken network blocks the command instead of hanging.** Each AWS call gets 2 minutes (a bucket copy gets 9), and cloudundo says which call it is waiting for.
 - cloudundo calls your own `aws` CLI with the same profile, region and environment as the agent's command. Inline access keys are used but never written to disk.
-- **The hook sees the command line, not what scripts do.** `./deploy.sh` that calls `aws s3 rm` inside is not seen. cloudundo protects AWS CLI commands the agent types.
 - **Every problem cloudundo can see blocks the command**: bad hook input, an AWS error, a full disk, its own bugs. If the hook program cannot start or times out, Claude Code (v2.1.295+, `onFailure: block`) and Cursor (`failClosed: true`) block too. Codex has no such setting, so there a missing or hung cloudundo lets commands through.
 - Undo puts each key back to how it was just before the command, using your computer's clock. If an app writes to the same keys after the command, undo will roll those writes back too, which is why it shows a preview first.
+
+## What cloudundo does not protect against
+
+Plainly, so you can decide where it fits:
+
+- **cloudundo is a seatbelt for mistakes, not a lock against a hostile agent.** The agent still holds your AWS keys. cloudundo makes the deletes it sees recoverable; it does not take the keys away.
+- **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script, an SDK call or `terraform apply` that deletes data is not seen by the hook. The policy below closes part of this gap.
+- **S3 and DynamoDB only**, through the AWS CLI. RDS, EBS, other clouds: not yet.
+- **Big buckets:** a bucket delete is protected by copying it, up to 5 GB by default.
+
+### Close the gap with an IAM policy
+
+`cloudundo policy` prints an IAM policy for the **agent's** AWS user. Every statement is a Deny, so it only takes permissions away, and none of them blocks what cloudundo itself does. With it, AWS itself refuses, whatever tool the agent uses, to:
+
+- delete or change cloudundo's backup bucket (`KeepCloudundoBackups`),
+- delete DynamoDB backups (`KeepDynamoDBBackups`),
+- with `--keep-versions`, remove any old S3 object version, so deletes in versioned buckets can always be undone (`KeepS3VersionHistory`). Undo still works: it copies the old version back instead of removing delete markers.
+
+```sh
+cloudundo policy --account 123456789012 --region eu-west-1 --keep-versions > cloudundo-policy.json
+aws iam put-user-policy --user-name <agent-user> --policy-name cloudundo-guard \
+    --policy-document file://cloudundo-policy.json
+```
+
+Run those with your own admin credentials. The command also prints how to create the backup bucket first. Give the agent its own IAM user: if you share one with it, the policy limits you too (cleaning up old backups then needs other credentials). The policy still does not stop an agent from suspending versioning on your buckets, changing their lifecycle rules, or deleting data in buckets that were never versioned, because cloudundo needs those same permissions to protect you.
 
 ### Commands it understands
 
@@ -97,18 +137,19 @@ Things to know:
 
 1. ~~S3: versioning before object deletes, bucket copies before bucket deletes, `undo`.~~ Done.
 2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
-3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; next is trying them inside each agent.
-4. Real-AWS tests for every case before the first release.
+3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; being tried inside each agent.
+4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
+5. RDS snapshots before deletes; backups kept outside the user's account; then other clouds.
 
 ## Development
 
 ```sh
-go build ./cmd/cloudundo
-go vet ./...
-go test -race ./...
-go test -run=^$ -fuzz=FuzzAnalyze -fuzztime=60s ./internal/effects
-go test -run=^$ -fuzz=FuzzHookInput -fuzztime=60s ./cmd/cloudundo
+make build     # ./cloudundo
+make check     # vet, gofmt, tests with -race, short fuzzing
+make release   # dist/: binaries for Linux, macOS, Windows + checksums.txt
 ```
+
+Recording a demo: [docs/DEMO.md](docs/DEMO.md).
 
 No dependencies outside the Go standard library.
 

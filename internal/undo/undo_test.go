@@ -254,9 +254,24 @@ func TestApplyStopsAtFirstFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.f.Fail["delete-object --bucket b --key x"] = "An error occurred (AccessDenied)"
+	w.f.Fail["delete-object --bucket b --key x"] = "An error occurred (InternalError)"
 	n, err := p.Apply(context.Background())
 	if err == nil || n != 0 || !strings.Contains(err.Error(), "s3://b/x") {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
+}
+
+func TestUndoWorksWhenRemovingVersionsIsDenied(t *testing.T) {
+	w := newWorld(t)
+	w.f.CreateBucket("b", "us-east-1", "")
+	w.f.Put("b", "x", "X")
+	e := w.protect("aws s3 rm s3://b/x")
+	w.f.Delete("b", "x")
+	// What `cloudundo policy` does: no version may be removed.
+	w.f.Fail["--version-id"] = "An error occurred (AccessDenied) when calling the DeleteObject operation"
+	p := w.undo(e)
+	if len(p.Actions) != 1 {
+		t.Fatalf("plan = %+v", p)
+	}
+	w.want("b", "x", "X")
 }

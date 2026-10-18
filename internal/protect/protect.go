@@ -271,6 +271,13 @@ func (r *Result) bucketCopy(ctx context.Context, c awscli.Client, e effects.Effe
 		}
 		r.Protection = append(r.Protection, fmt.Sprintf("created private backup bucket s3://%s", backup))
 	}
+	// A versioned backup bucket keeps old copies even if something writes
+	// over them. Best effort: a backup is still worth making without it.
+	if st, err := rc.VersioningStatus(ctx, backup); err != nil || st != "Enabled" {
+		if err := rc.EnableVersioning(ctx, backup); err != nil {
+			r.Notes = append(r.Notes, fmt.Sprintf("Could not turn on versioning for the backup bucket s3://%s, so backups written over there cannot be recovered.", backup))
+		}
+	}
 
 	prefix := fmt.Sprintf("%s/%s/", e.Bucket, since.Format("20060102T150405Z"))
 	if err := rc.Sync(ctx, "s3://"+e.Bucket, "s3://"+backup+"/"+prefix); err != nil {

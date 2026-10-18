@@ -263,3 +263,30 @@ func TestHuman(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupBucketIsVersioned(t *testing.T) {
+	f, cf, cfg := setup(t)
+	f.CreateBucket("user-data", "eu-west-1", "")
+	f.Put("user-data", "a.txt", "alpha")
+	r := protect(t, f, cf, cfg, "aws s3 rb s3://user-data --force")
+	if !r.Allowed {
+		t.Fatalf("blocked: %v", r.Blocked)
+	}
+	if v := f.Versioning("cloudundo-backup-123456789012-eu-west-1"); v != "Enabled" {
+		t.Fatalf("backup bucket versioning = %q", v)
+	}
+}
+
+func TestBackupStillMadeWhenItsVersioningIsDenied(t *testing.T) {
+	f, cf, cfg := setup(t)
+	f.CreateBucket("user-data", "eu-west-1", "")
+	f.Put("user-data", "a.txt", "alpha")
+	f.Fail["put-bucket-versioning --bucket cloudundo-backup-"] = "An error occurred (AccessDenied)"
+	r := protect(t, f, cf, cfg, "aws s3 rb s3://user-data --force")
+	if !r.Allowed || len(r.Undo) != 1 {
+		t.Fatalf("blocked: %v", r.Blocked)
+	}
+	if !strings.Contains(strings.Join(r.Notes, "\n"), "Could not turn on versioning for the backup bucket") {
+		t.Fatalf("notes = %v", r.Notes)
+	}
+}

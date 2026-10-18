@@ -2,4 +2,4 @@
 /dist/
 *.test
 *.out
-internal/**/testdata/fuzz/
+**/testdata/fuzz/

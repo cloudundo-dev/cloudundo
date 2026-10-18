@@ -157,13 +157,21 @@ func planVersions(ctx context.Context, c awscli.Client, s journal.UndoStep, p *P
 				onlyMarkers = false
 			}
 		}
+		prev := *before
 		if onlyMarkers {
 			markers := after
 			p.Actions = append(p.Actions, Action{
 				Desc: "bring back " + uri,
 				do: func(ctx context.Context) error {
 					for _, m := range markers {
-						if err := c.DeleteVersion(ctx, s.Bucket, key, m.VersionID); err != nil {
+						err := c.DeleteVersion(ctx, s.Bucket, key, m.VersionID)
+						if awscli.Has(err, "AccessDenied") {
+							// The `cloudundo policy` forbids removing versions,
+							// delete markers included: copy the old version back
+							// on top instead, which needs no delete.
+							return c.RestoreVersion(ctx, s.Bucket, key, prev.VersionID)
+						}
+						if err != nil {
 							return err
 						}
 					}
@@ -172,7 +180,6 @@ func planVersions(ctx context.Context, c awscli.Client, s journal.UndoStep, p *P
 			})
 			continue
 		}
-		prev := *before
 		p.Actions = append(p.Actions, Action{
 			Desc: fmt.Sprintf("restore %s to its version from %s", uri, prev.LastModified.UTC().Format("2006-01-02 15:04:05 UTC")),
 			do: func(ctx context.Context) error {
