@@ -153,6 +153,10 @@ func (r *Result) check(effs []effects.Effect) {
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
 				"cannot tell exactly what %q would change (%s). Use explicit names, or run it yourself.",
 				cmd, target(e)))
+		case e.Kind == effects.UnprotectedData:
+			r.Blocked = append(r.Blocked, fmt.Sprintf(
+				"%q deletes %s, which holds data cloudundo cannot back up yet. Back it up yourself first, or run it yourself.",
+				e.Command, e.Via))
 		case e.Kind == effects.EraseCacheData:
 			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %s. Run it yourself if you mean it.", cmd, e.Detail))
 		case e.Kind == effects.WeakenProtection:
@@ -186,7 +190,7 @@ func (r *Result) terraformPlan(ctx context.Context, e effects.Effect, clientFor 
 		}
 	}
 	if len(others) > 0 {
-		r.Notes = append(r.Notes, fmt.Sprintf("%q also deletes %d resource(s) that hold no data (%s); cloudundo restores data, not infrastructure.",
+		r.Notes = append(r.Notes, fmt.Sprintf("%q also deletes %d resource(s) that cloudundo does not restore (%s): infrastructure such as networks and services, not stored data. Re-apply your Terraform for those.",
 			e.Command, len(others), shortList(others, 4)))
 	}
 	if len(derived) == 0 {

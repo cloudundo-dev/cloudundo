@@ -70,7 +70,7 @@ func TestUndoTerraformDestroy(t *testing.T) {
 		t.Fatalf("undo steps = %d: %+v", len(r.Undo), r.Undo)
 	}
 	notes := strings.Join(r.Notes, " ")
-	if !strings.Contains(notes, "2 resource(s) that hold no data") || !strings.Contains(notes, "aws_vpc.main") {
+	if !strings.Contains(notes, "2 resource(s) that cloudundo does not restore") || !strings.Contains(notes, "aws_vpc.main") {
 		t.Fatalf("notes = %s", notes)
 	}
 	for _, s := range r.Undo {
@@ -160,6 +160,16 @@ func TestTerraformVersioningGoesWithItsBucket(t *testing.T) {
 	  {"address":"aws_s3_bucket_versioning.site","mode":"managed","type":"aws_s3_bucket_versioning","change":{"actions":["delete"],"before":{"bucket":"site"}}}]}`
 	_, r := w.protectTF("terraform destroy", cannedPlanner(plan, nil))
 	if !r.Allowed || len(r.Undo) != 1 || r.Undo[0].Kind != "s3-bucket-copy" {
+		t.Fatalf("r = %+v", r)
+	}
+}
+
+func TestTerraformBlocksDataItCannotBackUp(t *testing.T) {
+	w := newWorld(t)
+	plan := `{"resource_changes":[{"address":"aws_ebs_volume.data","mode":"managed","type":"aws_ebs_volume",
+	  "change":{"actions":["delete"],"before":{"id":"vol-1","arn":"arn:aws:ec2:us-east-1:123456789012:volume/vol-1"}}}]}`
+	_, r := w.protectTF("terraform destroy", cannedPlanner(plan, nil))
+	if r.Allowed || !strings.Contains(strings.Join(r.Blocked, " "), "aws_ebs_volume.data, which holds data cloudundo cannot back up yet") {
 		t.Fatalf("r = %+v", r)
 	}
 }

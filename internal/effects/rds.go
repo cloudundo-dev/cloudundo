@@ -18,6 +18,9 @@ const (
 	// EraseCacheData empties a Redis or Valkey server from inside
 	// (FLUSHALL, FLUSHDB). Nothing outside the server can bring it back.
 	EraseCacheData Kind = "erase-cache-data"
+	// UnprotectedData deletes stored data cloudundo cannot back up yet
+	// (an EBS volume or EFS file system in a terraform plan, say).
+	UnprotectedData Kind = "unprotected-data"
 )
 
 // Cache kinds.

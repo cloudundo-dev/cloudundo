@@ -97,6 +97,8 @@ Plainly, so you can decide where it fits:
 - **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script, an SDK call or `terraform apply` that deletes data is not seen by the hook. The policy below closes part of this gap.
 - **Data deleted from inside a database is not seen.** `DROP TABLE` or `DELETE FROM` through `psql` or `mysql` goes straight to the database, not through the AWS CLI. Use your database's own backups (RDS automated backups, point-in-time recovery) for that.
 - **S3, DynamoDB, RDS and ElastiCache**, through the AWS CLI or Terraform. EBS, EFS, other clouds: not yet. Terraform restores the data, not the infrastructure around it (networks, load balancers, IAM): re-apply your Terraform for those.
+- **A plan that deletes data cloudundo cannot back up yet** (EBS volumes, EFS, Redshift, DocumentDB, OpenSearch, KMS keys and similar) is blocked, with the resource named, instead of running unprotected.
+- **Wrappers are not seen**: `terragrunt`, `make destroy` or a script that runs Terraform inside. Run Terraform directly, or ask the agent to.
 - **Terraform commands take longer**: cloudundo makes a plan before the agent's apply or destroy makes its own, so expect up to twice the planning time.
 - **Terraform needs to plan locally.** Remote runs on HCP Terraform / Terraform Cloud cannot save a plan, so cloudundo blocks those. A provider that uses a different AWS account than your current credentials is blocked too, with the account named.
 - **Platforms outside AWS** (Supabase, Railway, Vercel, Replit) are not covered.

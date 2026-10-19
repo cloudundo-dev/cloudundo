@@ -164,8 +164,13 @@ func fromPlan(body []byte, tf effects.Effect) (effs []effects.Effect, others []s
 			e.Database = str(b, "db_snapshot_identifier") + str(b, "db_cluster_snapshot_identifier")
 			e.Detail = "deletes a database snapshot (" + rc.Address + ")"
 		default:
-			others = append(others, rc.Address)
-			continue
+			if !unprotectedTypes[rc.Type] {
+				others = append(others, rc.Address)
+				continue
+			}
+			e.Kind = effects.UnprotectedData
+			e.Detail = rc.Type
+			e.Database = rc.Address // named, so it is not taken for an unknown target
 		}
 		if e.Bucket == "" && e.Table == "" && e.Database == "" && e.Cache == "" {
 			e.Uncertain = true
@@ -174,6 +179,20 @@ func fromPlan(body []byte, tf effects.Effect) (effs []effects.Effect, others []s
 	}
 	sort.Strings(others)
 	return effs, others, nil
+}
+
+// unprotectedTypes hold data that cloudundo cannot back up yet; a plan
+// that deletes one is blocked rather than let through unprotected.
+var unprotectedTypes = map[string]bool{
+	"aws_ebs_volume": true, "aws_efs_file_system": true, "aws_fsx_lustre_file_system": true,
+	"aws_fsx_windows_file_system": true, "aws_fsx_ontap_file_system": true, "aws_fsx_openzfs_file_system": true,
+	"aws_redshift_cluster": true, "aws_redshiftserverless_namespace": true,
+	"aws_docdb_cluster": true, "aws_neptune_cluster": true, "aws_memorydb_cluster": true,
+	"aws_opensearch_domain": true, "aws_elasticsearch_domain": true,
+	"aws_keyspaces_table": true, "aws_timestreamwrite_table": true, "aws_qldb_ledger": true,
+	"aws_kinesis_stream": true, "aws_glacier_vault": true, "aws_backup_vault": true,
+	"aws_ecr_repository": true, "aws_kms_key": true, "aws_secretsmanager_secret": true,
+	"aws_lightsail_database": true, "aws_lightsail_disk": true,
 }
 
 func deletes(actions []string) bool {
