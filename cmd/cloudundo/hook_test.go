@@ -411,3 +411,24 @@ func TestHookBlocksOnPanicOutsideProtection(t *testing.T) {
 		t.Fatalf("exit %d %s", code, errOut)
 	}
 }
+
+func TestHookRunsInTheAgentsDirectory(t *testing.T) {
+	withFake(t)
+	bin := t.TempDir()
+	log := filepath.Join(bin, "log")
+	script := "#!/bin/sh\necho \"$PWD\" >> " + log + "\ncase \"$1\" in show) echo '{\"resource_changes\":[]}';; esac\n"
+	if err := os.WriteFile(filepath.Join(bin, "terraform"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	project, _ := filepath.EvalSymlinks(t.TempDir())
+	t.Chdir(t.TempDir())
+	in, _ := json.Marshal(map[string]any{"tool_name": "Bash", "cwd": project, "tool_input": map[string]any{"command": "terraform destroy -auto-approve"}})
+	if code, _, errOut := hookRun(t, agentClaude, string(in)); code != 0 {
+		t.Fatalf("exit %d %s", code, errOut)
+	}
+	b, _ := os.ReadFile(log)
+	if got := strings.TrimSpace(strings.Split(string(b), "\n")[0]); got != project {
+		t.Fatalf("terraform ran in %q, want %q", got, project)
+	}
+}

@@ -28,6 +28,8 @@ func FuzzAnalyze(f *testing.F) {
 		"aws rds delete-db-cluster --db-cluster-identifier c --final-db-snapshot-identifier f",
 		"aws elasticache delete-replication-group --replication-group-id g",
 		"redis-cli -h x FLUSHALL",
+		"cd infra && terraform destroy -auto-approve -target=aws_db_instance.main",
+		"terraform -chdir=x apply plan.out",
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -56,6 +58,10 @@ func FuzzAnalyze(f *testing.F) {
 			case "elasticache":
 				if !validName(e.Cache) && !e.Uncertain {
 					t.Fatalf("unknown cache not marked uncertain for %q: %+v", line, e)
+				}
+			case "terraform":
+				if e.TF == nil || e.Kind != TerraformChange {
+					t.Fatalf("terraform effect %+v", e)
 				}
 			case "redis":
 				if e.Kind != EraseCacheData {

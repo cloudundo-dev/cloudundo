@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -189,5 +191,34 @@ func TestPolicyCommand(t *testing.T) {
 	}
 	if code, out, _ := runCLI(t, "policy"); code != 0 || !strings.Contains(out, "cloudundo-backup-*") {
 		t.Fatalf("default: %d %s", code, out)
+	}
+}
+
+func TestProtectTerraformDestroyThenUndo(t *testing.T) {
+	f := withFake(t)
+	f.CreateDB(awscli.DBInfo{ID: "courses-db", Engine: "postgres", Class: "db.t4g.micro"}, "answers")
+	bin := t.TempDir()
+	plan := `{"resource_changes":[{"address":"aws_db_instance.main","mode":"managed","type":"aws_db_instance","change":{"actions":["delete"],"before":{"identifier":"courses-db","skip_final_snapshot":true,"arn":"arn:aws:rds:us-east-1:123456789012:db:courses-db"}}}]}`
+	script := "#!/bin/sh\ncase \"$1\" in show) echo '" + plan + "';; plan) exit 0;; *) echo \"refusing $1\" >&2; exit 9;; esac\n"
+	if err := os.WriteFile(filepath.Join(bin, "terraform"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	infra := filepath.Join(t.TempDir(), "infra")
+	os.Mkdir(infra, 0o755)
+	t.Chdir(filepath.Dir(infra))
+
+	code, out, errOut := runCLI(t, "protect", "--", "cd infra && terraform destroy -auto-approve")
+	if code != 0 || !strings.Contains(out, "made snapshot cloudundo-courses-db-") {
+		t.Fatalf("protect: %d\n%s%s", code, out, errOut)
+	}
+	f.DropDB("courses-db", false, "")
+	runCLI(t, "undo", "1", "--yes")
+	code, out, errOut = runCLI(t, "undo", "1", "--yes")
+	if code != 0 || !strings.Contains(out, "Restored") {
+		t.Fatalf("undo: %d\n%s%s", code, out, errOut)
+	}
+	if _, data, ok := f.DB("courses-db", false); !ok || data != "answers" {
+		t.Fatalf("db = %v %q", ok, data)
 	}
 }

@@ -48,7 +48,12 @@ type Effect struct {
 	// before deleting; SkipFinalSnapshot means it asked for none.
 	FinalSnapshot     string `json:"final_snapshot,omitempty"`
 	SkipFinalSnapshot bool   `json:"skip_final_snapshot,omitempty"`
-	Bucket            string `json:"bucket,omitempty"`
+	// TF is set for a terraform apply or destroy (Kind TerraformChange).
+	TF *Terraform `json:"terraform,omitempty"`
+	// Via is the command that produced a derived effect (a terraform
+	// resource address), for messages.
+	Via    string `json:"via,omitempty"`
+	Bucket string `json:"bucket,omitempty"`
 	// Table is the DynamoDB table.
 	Table string `json:"table,omitempty"`
 	// Items are DynamoDB JSON objects: keys, or whole items when FullItems.
@@ -74,10 +79,42 @@ type Effect struct {
 	Conn awscli.Conn `json:"conn"`
 }
 
-// Analyze returns the S3 effects of every aws command in a shell line.
+// Analyze returns the effects of every command in a shell line. It
+// follows cd, so a terraform command knows its directory; directories
+// are relative to where the line runs.
 func Analyze(line string) []Effect {
 	var out []Effect
+	dir, dirKnown := "", true
 	for _, s := range shellparse.Split(line) {
+		if len(s.Args) == 0 {
+			continue
+		}
+		switch s.Args[0] {
+		case "cd", "pushd":
+			switch {
+			case len(s.Args) == 1:
+				dir = joinDir("", "~")
+			case s.Uncertain || looksDynamic(s.Args[1]) || s.Args[1] == "-":
+				dirKnown = false
+			default:
+				dir = joinDir(dir, s.Args[1])
+			}
+			continue
+		case "popd":
+			dirKnown = false
+			continue
+		}
+		if effs := terraform(s.Args, dir, dirKnown); effs != nil {
+			for i := range effs {
+				effs[i].Command = strings.Join(s.Args, " ")
+				effs[i].Conn = awscli.ConnFromEnv(s.Env)
+				if s.Uncertain {
+					effs[i].Uncertain = true
+				}
+			}
+			out = append(out, effs...)
+			continue
+		}
 		out = append(out, AnalyzeArgs(s.Args, s.Uncertain, s.Env)...)
 	}
 	return out

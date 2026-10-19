@@ -36,13 +36,15 @@ type Config struct {
 	// blocking (the agent can retry; the snapshot is reused).
 	SnapshotWait time.Duration
 	SnapshotPoll time.Duration
+	// Planner reads what a terraform command would delete.
+	Planner Planner
 }
 
 // Defaults: 7 days, 5 GiB, wait up to 60 s for a table backup, 100 items.
 func Defaults() Config {
 	return Config{RetentionDays: 7, MaxCopyBytes: 5 << 30, Now: time.Now,
 		BackupWait: 60 * time.Second, Sleep: time.Sleep, MaxItems: 100,
-		SnapshotWait: 7 * time.Minute, SnapshotPoll: 10 * time.Second}
+		SnapshotWait: 7 * time.Minute, SnapshotPoll: 10 * time.Second, Planner: ExecPlanner}
 }
 
 // Result is the outcome for one command.
@@ -69,75 +71,135 @@ func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Co
 	since := cfg.Now().UTC()
 
 	// 1. Refuse what cannot be protected before changing anything.
-	for _, e := range effs {
-		switch {
-		case strings.HasPrefix(e.Bucket, BackupBucketPrefix) && e.Kind != effects.OverwriteObjects:
-			r.Blocked = append(r.Blocked, fmt.Sprintf(
-				"%q would change s3://%s, where cloudundo keeps its backups. Remove backups yourself, not through an agent.",
-				e.Command, e.Bucket))
-		case e.Uncertain:
-			r.Blocked = append(r.Blocked, fmt.Sprintf(
-				"cannot tell exactly what %q would change (%s). Use explicit bucket and key names, or run it yourself.",
-				e.Command, target(e)))
-		case e.Kind == effects.EraseCacheData:
-			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %s. Run it yourself if you mean it.", e.Command, e.Detail))
-		case e.Kind == effects.WeakenProtection:
-			r.Blocked = append(r.Blocked, fmt.Sprintf(
-				"%q %s, which makes data loss on %s harder or impossible to undo. Run it yourself if you mean it.",
-				e.Command, e.Detail, target(e)))
-		}
-	}
+	r.check(effs)
 	if len(r.Blocked) > 0 {
 		return r
 	}
 
-	// 2. Protect, once per bucket and account.
+	// 2. Read what terraform commands would delete, and check that too.
+	var all []effects.Effect
+	for _, e := range effs {
+		if e.Kind != effects.TerraformChange {
+			all = append(all, e)
+			continue
+		}
+		derived, ok := r.terraformPlan(ctx, e, clientFor, cfg)
+		if !ok {
+			return r.fail()
+		}
+		r.check(derived)
+		if len(r.Blocked) > 0 {
+			return r.fail()
+		}
+		all = append(all, derived...)
+	}
+
+	// 3. Protect, once per bucket and account.
 	versioned := map[string]bool{}
 	saved := 0
-	for _, e := range effs {
+	for _, e := range all {
 		c := clientFor(e.Conn)
+		ok := true
 		switch e.Kind {
 		case effects.DeleteObjects, effects.OverwriteObjects:
 			key := e.Conn.Key() + "|" + e.Bucket
 			if !versioned[key] {
 				versioned[key] = true
-				if !r.versioning(ctx, c, e.Bucket, cfg) {
-					return r.fail()
-				}
+				ok = r.versioning(ctx, c, e.Bucket, cfg)
 			}
-			r.Undo = append(r.Undo, journal.UndoStep{
-				Kind: "s3-versions", Bucket: e.Bucket, Key: e.Key, Keys: e.Keys,
-				Prefix: e.Prefix, Recursive: e.Recursive, Since: since, Conn: e.Conn,
-			})
+			if ok {
+				r.Undo = append(r.Undo, journal.UndoStep{
+					Kind: "s3-versions", Bucket: e.Bucket, Key: e.Key, Keys: e.Keys,
+					Prefix: e.Prefix, Recursive: e.Recursive, Since: since, Conn: e.Conn,
+				})
+			}
 		case effects.DeleteBucket:
-			if !r.bucketCopy(ctx, c, e, since, cfg) {
-				return r.fail()
-			}
+			ok = r.bucketCopy(ctx, c, e, since, cfg)
 		case effects.DeleteTable:
-			if !r.tableBackup(ctx, c, e, since, cfg) {
-				return r.fail()
-			}
+			ok = r.tableBackup(ctx, c, e, since, cfg)
 		case effects.DeleteItems, effects.OverwriteItems:
 			saved++
-			if !r.saveItems(ctx, c, e, since, saved, cfg) {
-				return r.fail()
-			}
+			ok = r.saveItems(ctx, c, e, since, saved, cfg)
 		case effects.DeleteDatabase:
-			if !r.dbSnapshot(ctx, c, e, since, cfg) {
-				return r.fail()
-			}
+			ok = r.dbSnapshot(ctx, c, e, since, cfg)
 		case effects.DeleteCache:
-			if !r.cacheDelete(ctx, c, e) {
-				return r.fail()
-			}
+			ok = r.cacheDelete(ctx, c, e)
 		default:
 			// Fail closed: a kind this version cannot protect is blocked.
 			r.Blocked = append(r.Blocked, fmt.Sprintf("cloudundo cannot protect %q (%s) yet.", e.Command, e.Kind))
+			ok = false
+		}
+		if !ok {
 			return r.fail()
 		}
 	}
 	r.Allowed = true
 	return r
+}
+
+// check blocks effects that cannot be protected at all.
+func (r *Result) check(effs []effects.Effect) {
+	for _, e := range effs {
+		cmd := e.Command
+		if e.Via != "" {
+			cmd += " → " + e.Via
+		}
+		switch {
+		case strings.HasPrefix(e.Bucket, BackupBucketPrefix) && e.Kind != effects.OverwriteObjects:
+			r.Blocked = append(r.Blocked, fmt.Sprintf(
+				"%q would change s3://%s, where cloudundo keeps its backups. Remove backups yourself, not through an agent.",
+				cmd, e.Bucket))
+		case e.Uncertain:
+			r.Blocked = append(r.Blocked, fmt.Sprintf(
+				"cannot tell exactly what %q would change (%s). Use explicit names, or run it yourself.",
+				cmd, target(e)))
+		case e.Kind == effects.EraseCacheData:
+			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %s. Run it yourself if you mean it.", cmd, e.Detail))
+		case e.Kind == effects.WeakenProtection:
+			r.Blocked = append(r.Blocked, fmt.Sprintf(
+				"%q %s, which makes data loss on %s harder or impossible to undo. Run it yourself if you mean it.",
+				cmd, e.Detail, target(e)))
+		}
+	}
+}
+
+// terraformPlan asks terraform what the command would delete.
+func (r *Result) terraformPlan(ctx context.Context, e effects.Effect, clientFor ClientFor, cfg Config) ([]effects.Effect, bool) {
+	if cfg.Planner == nil {
+		r.Blocked = append(r.Blocked, "no way to read terraform plans is configured")
+		return nil, false
+	}
+	body, err := cfg.Planner(ctx, *e.TF, e.Conn)
+	if err != nil {
+		r.Blocked = append(r.Blocked, fmt.Sprintf("could not see what %q would delete: %v", e.Command, err))
+		return nil, false
+	}
+	derived, others, err := fromPlan(body, e)
+	if err != nil {
+		r.Blocked = append(r.Blocked, err.Error())
+		return nil, false
+	}
+	if len(derived) > 0 {
+		if err := checkAccounts(ctx, body, clientFor(e.Conn)); err != nil {
+			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %v", e.Command, err))
+			return nil, false
+		}
+	}
+	if len(others) > 0 {
+		r.Notes = append(r.Notes, fmt.Sprintf("%q also deletes %d resource(s) that hold no data (%s); cloudundo restores data, not infrastructure.",
+			e.Command, len(others), shortList(others, 4)))
+	}
+	if len(derived) == 0 {
+		r.Notes = append(r.Notes, fmt.Sprintf("%q deletes no data cloudundo knows (S3, DynamoDB, RDS, ElastiCache).", e.Command))
+	}
+	return derived, true
+}
+
+func shortList(s []string, n int) string {
+	if len(s) <= n {
+		return strings.Join(s, ", ")
+	}
+	return strings.Join(s[:n], ", ") + fmt.Sprintf(" and %d more", len(s)-n)
 }
 
 // fail turns a partial run into a block. Protections already applied

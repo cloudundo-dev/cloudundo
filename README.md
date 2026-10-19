@@ -64,6 +64,7 @@ Exit code 0 means the command is safe to run. Exit code 2 means it must not run:
 | delete an RDS database or Aurora cluster | uses the final snapshot the command asks for, or takes a snapshot itself and waits until it is ready; records size, network, security groups, parameter groups and tags | restores it under the same name with those settings, then sets backup retention and re-adds a cluster's instances |
 | delete an ElastiCache cluster, replication group or serverless cache | lets it run if AWS keeps a final snapshot (or it is Memcached, or a replica); otherwise blocks it and says to add `--final-snapshot-identifier` | – (create a new cache from the snapshot) |
 | `redis-cli FLUSHALL` / `FLUSHDB` | blocks it: nothing outside the server can bring that data back | |
+| `terraform destroy` or `terraform apply` (or `tofu`) | asks Terraform for the plan first (`plan -lock=false` into a temporary file, or `show` of a saved plan; it never applies anything), then protects every database, bucket, object, table and cache the plan deletes or replaces, as above | restores each of them as above |
 | target something it cannot read (`$VAR`, `xargs`, `file://`) | blocks it | |
 | suspend versioning, change lifecycle rules, or touch the backup bucket | blocks it | |
 | run PartiQL or transactions, turn off deletion protection or point-in-time recovery, turn on TTL, or delete a backup | blocks it | |
@@ -95,7 +96,10 @@ Plainly, so you can decide where it fits:
 - **cloudundo is a seatbelt for mistakes, not a lock against a hostile agent.** The agent still holds your AWS keys. cloudundo makes the deletes it sees recoverable; it does not take the keys away.
 - **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script, an SDK call or `terraform apply` that deletes data is not seen by the hook. The policy below closes part of this gap.
 - **Data deleted from inside a database is not seen.** `DROP TABLE` or `DELETE FROM` through `psql` or `mysql` goes straight to the database, not through the AWS CLI. Use your database's own backups (RDS automated backups, point-in-time recovery) for that.
-- **S3, DynamoDB, RDS and ElastiCache**, through the AWS CLI. EBS, EFS, other clouds: not yet.
+- **S3, DynamoDB, RDS and ElastiCache**, through the AWS CLI or Terraform. EBS, EFS, other clouds: not yet. Terraform restores the data, not the infrastructure around it (networks, load balancers, IAM): re-apply your Terraform for those.
+- **Terraform commands take longer**: cloudundo makes a plan before the agent's apply or destroy makes its own, so expect up to twice the planning time.
+- **Terraform needs to plan locally.** Remote runs on HCP Terraform / Terraform Cloud cannot save a plan, so cloudundo blocks those. A provider that uses a different AWS account than your current credentials is blocked too, with the account named.
+- **Platforms outside AWS** (Supabase, Railway, Vercel, Replit) are not covered.
 - **Big buckets:** a bucket delete is protected by copying it, up to 5 GB by default.
 
 ### Close the gap with an IAM policy
@@ -131,6 +135,7 @@ Run those with your own admin credentials. The command also prints how to create
 | `aws rds delete-db-instance`, `delete-db-cluster` | delete database |
 | `aws elasticache delete-cache-cluster`, `delete-replication-group`, `delete-serverless-cache` | delete cache |
 | `redis-cli` / `valkey-cli` with `FLUSHALL` or `FLUSHDB` | erase cache, blocked |
+| `terraform destroy`, `terraform apply [plan]`, `tofu …`, after any `cd` or `-chdir` | read from its plan |
 | `update-table` turning off deletion protection, `update-continuous-backups` turning off recovery, `update-time-to-live` turning on TTL, `delete-backup` | weakens protection |
 
 ### Settings
@@ -148,7 +153,7 @@ Run those with your own admin credentials. The command also prints how to create
 2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
 3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; being tried inside each agent.
 4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
-5. ~~RDS snapshots before deletes, ElastiCache snapshot rules.~~ Done; real-AWS run next.
+5. ~~RDS snapshots before deletes, ElastiCache snapshot rules, Terraform plans.~~ Done; real-AWS run next.
 6. Backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
 
 ## Development

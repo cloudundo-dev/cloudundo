@@ -104,33 +104,84 @@ echo "aws dynamodb delete-table --table-name cu-test" > cmd.txt
 aws dynamodb get-item --table-name cu-test --key '{"pk":{"S":"u1"}}'   # must show Ali
 ```
 
-## Test 7: RDS database (about 30–40 minutes, mostly waiting)
+## Test 7: Terraform destroys a database, a bucket and a table (about 40 minutes, mostly waiting)
 
-Creates the smallest Postgres database, lets the "agent" delete it, and brings it back.
-Cost: a few cents (or covered by your account's free credits). Delete it at the end.
+This is the February 2026 incident in small: an agent runs `terraform destroy` on an RDS database and its data.
+It tests RDS and Terraform together. Cost: a few cents (or your account's free credits). Needs Terraform
+installed in Ubuntu (`terraform -version`).
 
 ```sh
-aws rds create-db-instance --db-instance-identifier cu-test-db --engine postgres \
-  --db-instance-class db.t4g.micro --allocated-storage 20 \
-  --master-username cuadmin --master-user-password "$(openssl rand -hex 12)" \
-  --no-publicly-accessible --backup-retention-period 1 --tags Key=purpose,Value=cloudundo-test > /dev/null
-aws rds wait db-instance-available --db-instance-identifier cu-test-db      # 5–10 minutes
+mkdir -p ~/cloudundo-test/tf && cd ~/cloudundo-test/tf
+cat > main.tf <<'TF'
+provider "aws" { region = "eu-west-1" }
+variable "db_password" { sensitive = true }
+resource "aws_db_instance" "main" {
+  identifier          = "cu-tf-db"
+  engine              = "postgres"
+  instance_class      = "db.t4g.micro"
+  allocated_storage   = 20
+  username            = "cuadmin"
+  password            = var.db_password
+  skip_final_snapshot = true
+  publicly_accessible = false
+  tags = { purpose = "cloudundo-test" }
+}
+resource "aws_s3_bucket" "files" {
+  bucket_prefix = "cu-tf-files-"
+  force_destroy = true
+}
+resource "aws_s3_object" "hello" {
+  bucket  = aws_s3_bucket.files.id
+  key     = "hello.txt"
+  content = "hello"
+}
+resource "aws_dynamodb_table" "users" {
+  name         = "cu-tf-users"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+}
+output "bucket" { value = aws_s3_bucket.files.id }
+TF
+export TF_VAR_db_password="$(openssl rand -hex 12)"
+terraform init -input=false
+terraform apply -auto-approve                       # 5–10 minutes
+BUCKET=$(terraform output -raw bucket)
+aws dynamodb put-item --table-name cu-tf-users --item '{"pk":{"S":"u1"},"name":{"S":"Ali"}}'
 
-echo "aws rds delete-db-instance --db-instance-identifier cu-test-db --skip-final-snapshot" > cmd.txt
-./cloudundo protect -- "$(cat cmd.txt)" && sh cmd.txt > /dev/null           # waits for the snapshot first
-aws rds wait db-instance-deleted --db-instance-identifier cu-test-db        # 5–10 minutes
+# The "agent":
+../cloudundo protect -- "terraform destroy -auto-approve" && terraform destroy -auto-approve
+```
 
-./cloudundo log                                   # note the number
-./cloudundo undo <number> --yes                   # starts the restore
-aws rds wait db-instance-available --db-instance-identifier cu-test-db      # 10–20 minutes
-./cloudundo undo <number> --yes                   # finishes: says "Restored"
-aws rds describe-db-instances --db-instance-identifier cu-test-db \
-  --query 'DBInstances[0].[DBInstanceStatus,DBInstanceClass,BackupRetentionPeriod]'   # available, db.t4g.micro, 1
+What to look for in cloudundo's output: a snapshot of `cu-tf-db`, a copy of the bucket, a backup of the table.
+Then the destroy runs (5–10 minutes).
+
+```sh
+../cloudundo log                                   # note the number
+../cloudundo undo <number> --yes                   # starts the database and table restores, copies the bucket back
+aws rds wait db-instance-available --db-instance-identifier cu-tf-db       # 10–20 minutes
+../cloudundo undo <number> --yes                   # finishes: says "Restored"
+
+aws s3 cp s3://$BUCKET/hello.txt -                 # hello
+aws dynamodb get-item --table-name cu-tf-users --key '{"pk":{"S":"u1"}}'   # Ali
+aws rds describe-db-instances --db-instance-identifier cu-tf-db --query 'DBInstances[0].[DBInstanceStatus,DBInstanceClass]'
 ```
 
 If `protect` says the snapshot is "still being made", run the same line again in a few minutes.
 
-Clean up: `aws rds delete-db-instance --db-instance-identifier cu-test-db --skip-final-snapshot`, then in the RDS console under Snapshots delete `cloudundo-cu-test-db-…`.
+Clean up. Terraform thinks these are gone, so delete them directly:
+
+```sh
+aws rds delete-db-instance --db-instance-identifier cu-tf-db --skip-final-snapshot
+aws dynamodb delete-table --table-name cu-tf-users
+aws s3 rb s3://$BUCKET --force
+```
+
+Then in the console: RDS → Snapshots → delete `cloudundo-cu-tf-db-…`; DynamoDB → Backups → delete `cloudundo-cu-tf-users-…`;
+S3 → empty and delete `cloudundo-backup-…`.
 
 ## Clean up (in the AWS console)
 

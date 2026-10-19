@@ -203,6 +203,8 @@ func describe(e effects.Effect) string {
 		verb = "DELETE CACHE"
 	case effects.EraseCacheData:
 		verb = "ERASE CACHE"
+	case effects.TerraformChange:
+		verb = "TERRAFORM "
 	default:
 		verb = string(e.Kind)
 	}
@@ -226,6 +228,14 @@ func describe(e effects.Effect) string {
 		}
 	case e.Service == "redis":
 		target = "redis server"
+	case e.Service == "terraform" && e.TF != nil:
+		target = "apply (deletions read from its plan before it runs)"
+		if e.TF.Destroy {
+			target = "destroy (what it deletes is read from its plan before it runs)"
+		}
+		if e.TF.Dir != "" {
+			target += " in " + e.TF.Dir
+		}
 	case e.Service == "dynamodb":
 		target = "dynamodb:" + e.Table
 		if e.Table == "" || e.Table == "?" {

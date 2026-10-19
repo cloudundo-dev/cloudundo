@@ -99,3 +99,7 @@ func (c Conn) Key() string {
 
 // jsonMarshal is encoding/json, here so tests can check what reaches disk.
 var jsonMarshal = json.Marshal
+
+// Environ is the environment a program run for this Conn needs: the
+// command's AWS variables, and inline credentials kept only in memory.
+func (c Conn) Environ() []string { return c.environ() }

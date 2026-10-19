@@ -70,6 +70,15 @@ func cmdHook(args []string, stdout, stderr io.Writer) (code int) {
 	if !isShell {
 		return allow(agent, stdout, outcome{Allowed: true})
 	}
+	// Run where the agent runs the command, so relative paths (a
+	// terraform directory, a plan file) mean the same thing.
+	if dir := hookCwd(body); dir != "" {
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			if err := os.Chdir(dir); err != nil {
+				return block("cloudundo: blocked: cannot enter " + dir + ": " + err.Error())
+			}
+		}
+	}
 
 	o := decide(line, agent)
 	if !o.Allowed {
@@ -188,4 +197,13 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// hookCwd is the agent's working directory from the hook input, if given.
+func hookCwd(body []byte) string {
+	var in struct {
+		Cwd string `json:"cwd"`
+	}
+	_ = json.Unmarshal(body, &in)
+	return in.Cwd
 }
