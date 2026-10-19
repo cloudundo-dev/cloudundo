@@ -1,6 +1,7 @@
 // Package effects reads an aws CLI invocation and reports what it would
-// do to S3 data: delete objects, delete a bucket, overwrite objects, or
-// weaken the protections cloudundo relies on.
+// do to S3, DynamoDB, RDS or ElastiCache data: delete it, overwrite it,
+// or weaken the protections cloudundo relies on. It also spots
+// redis-cli FLUSHALL / FLUSHDB.
 //
 // It only reads the command; it never calls AWS. Deciding how to protect
 // each effect is a separate step.
@@ -31,12 +32,23 @@ const (
 	WeakenProtection Kind = "weaken-protection"
 )
 
-// Effect is one change to S3 or DynamoDB data.
+// Effect is one change to data in AWS.
 type Effect struct {
 	Kind Kind `json:"kind"`
-	// Service is "s3" or "dynamodb".
+	// Service is "s3", "dynamodb", "rds", "elasticache" or "redis".
 	Service string `json:"service"`
-	Bucket  string `json:"bucket,omitempty"`
+	// Database is the RDS instance, or the Aurora cluster when Cluster.
+	Database string `json:"database,omitempty"`
+	Cluster  bool   `json:"cluster,omitempty"`
+	// Cache is the ElastiCache cluster, replication group or serverless
+	// cache named by CacheKind.
+	Cache     string `json:"cache,omitempty"`
+	CacheKind string `json:"cache_kind,omitempty"`
+	// FinalSnapshot is the snapshot the command itself asks AWS to take
+	// before deleting; SkipFinalSnapshot means it asked for none.
+	FinalSnapshot     string `json:"final_snapshot,omitempty"`
+	SkipFinalSnapshot bool   `json:"skip_final_snapshot,omitempty"`
+	Bucket            string `json:"bucket,omitempty"`
 	// Table is the DynamoDB table.
 	Table string `json:"table,omitempty"`
 	// Items are DynamoDB JSON objects: keys, or whole items when FullItems.
@@ -74,6 +86,9 @@ func Analyze(line string) []Effect {
 // AnalyzeArgs returns the S3 effects of one argv. Non-aws commands and
 // read-only aws commands return nothing.
 func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect {
+	if effs := redisCLI(args); effs != nil {
+		return effs
+	}
 	if len(args) == 0 || filepath.Base(args[0]) != "aws" {
 		return nil
 	}
@@ -96,6 +111,12 @@ func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect 
 	case "dynamodb":
 		service = "dynamodb"
 		effs = dynamo(p)
+	case "rds":
+		service = "rds"
+		effs = rds(p)
+	case "elasticache":
+		service = "elasticache"
+		effs = elasticache(p)
 	}
 	conn := awscli.ConnFromEnv(env)
 	conn.Profile = p.value("profile")
@@ -112,6 +133,12 @@ func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect 
 			effs[i].Uncertain = true
 		}
 		if service == "dynamodb" && !validTable(effs[i].Table) {
+			effs[i].Uncertain = true
+		}
+		if service == "rds" && !validName(effs[i].Database) {
+			effs[i].Uncertain = true
+		}
+		if service == "elasticache" && !validName(effs[i].Cache) {
 			effs[i].Uncertain = true
 		}
 	}
@@ -389,6 +416,15 @@ var booleanFlags = map[string]bool{
 	"cli-auto-prompt": true, "no-cli-auto-prompt": true,
 	"deletion-protection-enabled": true, "no-deletion-protection-enabled": true,
 	"consistent-read": true, "no-consistent-read": true,
+	// rds and elasticache
+	"skip-final-snapshot": true, "no-skip-final-snapshot": true,
+	"delete-automated-backups": true, "no-delete-automated-backups": true,
+	"deletion-protection": true, "no-deletion-protection": true,
+	"apply-immediately": true, "no-apply-immediately": true,
+	"multi-az": true, "no-multi-az": true,
+	"publicly-accessible": true, "no-publicly-accessible": true,
+	"retain-primary-cluster": true, "no-retain-primary-cluster": true,
+	"copy-tags-to-snapshot": true, "no-copy-tags-to-snapshot": true,
 }
 
 // s3apiValueFlags are s3api flags whose name collides with a boolean

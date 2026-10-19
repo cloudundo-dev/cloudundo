@@ -24,6 +24,10 @@ func FuzzAnalyze(f *testing.F) {
 		`aws dynamodb batch-write-item --request-items '{"T":[{"DeleteRequest":{"Key":{"pk":{"S":"a"}}}}]}'`,
 		"aws dynamodb delete-item --table-name $T --key",
 		`aws dynamodb execute-statement --statement "DELETE FROM T"`,
+		"aws rds delete-db-instance --db-instance-identifier d --skip-final-snapshot",
+		"aws rds delete-db-cluster --db-cluster-identifier c --final-db-snapshot-identifier f",
+		"aws elasticache delete-replication-group --replication-group-id g",
+		"redis-cli -h x FLUSHALL",
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -44,6 +48,18 @@ func FuzzAnalyze(f *testing.F) {
 				}
 				if (e.Kind == DeleteItems || e.Kind == OverwriteItems) && len(e.Items) == 0 && !e.Uncertain {
 					t.Fatalf("item change without items not marked uncertain for %q: %+v", line, e)
+				}
+			case "rds":
+				if !validName(e.Database) && !e.Uncertain {
+					t.Fatalf("unknown database not marked uncertain for %q: %+v", line, e)
+				}
+			case "elasticache":
+				if !validName(e.Cache) && !e.Uncertain {
+					t.Fatalf("unknown cache not marked uncertain for %q: %+v", line, e)
+				}
+			case "redis":
+				if e.Kind != EraseCacheData {
+					t.Fatalf("redis effect %+v", e)
 				}
 			default:
 				t.Fatalf("effect without service for %q: %+v", line, e)

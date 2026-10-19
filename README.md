@@ -2,9 +2,9 @@
 
 **Your AI agent can delete anything. You can always get it back.**
 
-cloudundo sits in front of the AWS commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3 or DynamoDB, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back.
+cloudundo sits in front of the AWS commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3, DynamoDB or RDS, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back. For ElastiCache (Redis, Valkey) it makes sure a snapshot is kept, or stops the delete.
 
-> **Status: early, v0.1.** Protection and `undo` for S3 and DynamoDB are tested against a simulated AWS and were run by hand on real AWS (object delete, overwrite, bucket delete, a blocked command, DynamoDB item and table delete: all six undone). The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
+> **Status: early, v0.1.** Protection and `undo` for S3 and DynamoDB are tested against a simulated AWS and were run by hand on real AWS (object delete, overwrite, bucket delete, a blocked command, DynamoDB item and table delete: all six undone). RDS support is tested against the simulation and is next to be run on real AWS. The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
 
 ```text
 you:    "clean up the old test data"
@@ -61,9 +61,13 @@ Exit code 0 means the command is safe to run. Exit code 2 means it must not run:
 | delete a whole bucket (`rb --force`) | copies it (up to 5 GB) to a private backup bucket and checks the copy | recreates the bucket and copies the objects back |
 | delete a DynamoDB table | makes an on-demand backup, waits until it is ready, and records the table's settings | restores the table under the same name, then puts back its TTL, tags, stream, point-in-time recovery and deletion protection |
 | delete or change DynamoDB items (`delete-item`, `put-item`, `update-item`, `batch-write-item`, up to 100 items) | reads each item and saves it | saves the items' current values, then puts the old ones back |
+| delete an RDS database or Aurora cluster | uses the final snapshot the command asks for, or takes a snapshot itself and waits until it is ready; records size, network, security groups, parameter groups and tags | restores it under the same name with those settings, then sets backup retention and re-adds a cluster's instances |
+| delete an ElastiCache cluster, replication group or serverless cache | lets it run if AWS keeps a final snapshot (or it is Memcached, or a replica); otherwise blocks it and says to add `--final-snapshot-identifier` | – (create a new cache from the snapshot) |
+| `redis-cli FLUSHALL` / `FLUSHDB` | blocks it: nothing outside the server can bring that data back | |
 | target something it cannot read (`$VAR`, `xargs`, `file://`) | blocks it | |
 | suspend versioning, change lifecycle rules, or touch the backup bucket | blocks it | |
 | run PartiQL or transactions, turn off deletion protection or point-in-time recovery, turn on TTL, or delete a backup | blocks it | |
+| delete an RDS or cache snapshot or automated backups, turn off RDS deletion protection, set backup retention to 0 | blocks it | |
 
 ```sh
 cloudundo undo 1        # shows what it would restore; changes nothing
@@ -77,6 +81,7 @@ Things to know:
 - **Versioning is permanent.** Once on, it can be suspended but not removed.
 - **The 7-day expiry rule** is added only to buckets that were never versioned, so old versions you chose to keep are never expired. Existing lifecycle rules are kept as they are.
 - **Restored buckets come back private**, with their objects but not their old policy, website, CORS or tags.
+- **A database snapshot can take a while.** cloudundo waits up to 7 minutes; for a bigger database it blocks the delete and asks to run it again later, and the retry uses the same snapshot. Data written between the snapshot and the delete is not in it. Restoring takes minutes too: run the same `undo --yes` again to finish.
 - **Restoring a DynamoDB table takes minutes.** The first `undo --yes` starts it; run the same command again once it is done to put the settings back. Auto scaling, alarms and IAM policies are not restored. On-demand backups are kept until you delete them, and AWS bills for their storage.
 - **A slow or broken network blocks the command instead of hanging.** Each AWS call gets 2 minutes (a bucket copy gets 9), and cloudundo says which call it is waiting for.
 - cloudundo calls your own `aws` CLI with the same profile, region and environment as the agent's command. Inline access keys are used but never written to disk.
@@ -89,7 +94,8 @@ Plainly, so you can decide where it fits:
 
 - **cloudundo is a seatbelt for mistakes, not a lock against a hostile agent.** The agent still holds your AWS keys. cloudundo makes the deletes it sees recoverable; it does not take the keys away.
 - **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script, an SDK call or `terraform apply` that deletes data is not seen by the hook. The policy below closes part of this gap.
-- **S3 and DynamoDB only**, through the AWS CLI. RDS, EBS, other clouds: not yet.
+- **Data deleted from inside a database is not seen.** `DROP TABLE` or `DELETE FROM` through `psql` or `mysql` goes straight to the database, not through the AWS CLI. Use your database's own backups (RDS automated backups, point-in-time recovery) for that.
+- **S3, DynamoDB, RDS and ElastiCache**, through the AWS CLI. EBS, EFS, other clouds: not yet.
 - **Big buckets:** a bucket delete is protected by copying it, up to 5 GB by default.
 
 ### Close the gap with an IAM policy
@@ -97,7 +103,7 @@ Plainly, so you can decide where it fits:
 `cloudundo policy` prints an IAM policy for the **agent's** AWS user. Every statement is a Deny, so it only takes permissions away, and none of them blocks what cloudundo itself does. With it, AWS itself refuses, whatever tool the agent uses, to:
 
 - delete or change cloudundo's backup bucket (`KeepCloudundoBackups`),
-- delete DynamoDB backups (`KeepDynamoDBBackups`),
+- delete DynamoDB backups (`KeepDynamoDBBackups`) or cloudundo's RDS snapshots (`KeepCloudundoDBSnapshots`),
 - with `--keep-versions`, remove any old S3 object version, so deletes in versioned buckets can always be undone (`KeepS3VersionHistory`). Undo still works: it copies the old version back instead of removing delete markers.
 
 ```sh
@@ -122,6 +128,9 @@ Run those with your own admin credentials. The command also prints how to create
 | `aws dynamodb delete-table` | delete table |
 | `delete-item`, `put-item`, `update-item`, `batch-write-item` | delete or overwrite items |
 | `execute-statement`, `transact-write-items` and other PartiQL or transactions | not readable, blocked |
+| `aws rds delete-db-instance`, `delete-db-cluster` | delete database |
+| `aws elasticache delete-cache-cluster`, `delete-replication-group`, `delete-serverless-cache` | delete cache |
+| `redis-cli` / `valkey-cli` with `FLUSHALL` or `FLUSHDB` | erase cache, blocked |
 | `update-table` turning off deletion protection, `update-continuous-backups` turning off recovery, `update-time-to-live` turning on TTL, `delete-backup` | weakens protection |
 
 ### Settings
@@ -139,7 +148,8 @@ Run those with your own admin credentials. The command also prints how to create
 2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
 3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; being tried inside each agent.
 4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
-5. RDS snapshots before deletes; backups kept outside the user's account; then other clouds.
+5. ~~RDS snapshots before deletes, ElastiCache snapshot rules.~~ Done; real-AWS run next.
+6. Backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
 
 ## Development
 

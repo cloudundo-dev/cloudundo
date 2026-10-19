@@ -10,6 +10,9 @@ import (
 
 // TableInfo is what cloudundo needs from describe-table.
 type TableInfo struct {
+	// ID is the table's unique TableId; a table re-created or restored
+	// under the same name gets a new one, while the ARN stays the same.
+	ID                 string
 	Arn                string
 	Status             string
 	KeyAttrs           []string
@@ -28,6 +31,7 @@ func (c Client) DescribeTable(ctx context.Context, table string) (TableInfo, boo
 	}
 	var r struct {
 		Table struct {
+			TableId                   string
 			TableArn                  string
 			TableStatus               string
 			KeySchema                 []struct{ AttributeName string }
@@ -41,7 +45,7 @@ func (c Client) DescribeTable(ctx context.Context, table string) (TableInfo, boo
 	if err := json.Unmarshal(out, &r); err != nil {
 		return TableInfo{}, false, fmt.Errorf("read table %s: %w", table, err)
 	}
-	t := TableInfo{Arn: r.Table.TableArn, Status: r.Table.TableStatus, DeletionProtection: r.Table.DeletionProtectionEnabled}
+	t := TableInfo{ID: r.Table.TableId, Arn: r.Table.TableArn, Status: r.Table.TableStatus, DeletionProtection: r.Table.DeletionProtectionEnabled}
 	for _, k := range r.Table.KeySchema {
 		t.KeyAttrs = append(t.KeyAttrs, k.AttributeName)
 	}
@@ -111,19 +115,19 @@ func (c Client) BackupStatus(ctx context.Context, arn string) (string, error) {
 	return r.BackupDescription.BackupDetails.BackupStatus, nil
 }
 
-// RestoreTable creates table from a backup and returns the new table's ARN.
+// RestoreTable creates table from a backup and returns the new table's id.
 func (c Client) RestoreTable(ctx context.Context, table, backupArn string) (string, error) {
 	out, err := c.call(ctx, "dynamodb", "restore-table-from-backup", "--target-table-name", table, "--backup-arn", backupArn)
 	if err != nil {
 		return "", err
 	}
 	var r struct {
-		TableDescription struct{ TableArn string }
+		TableDescription struct{ TableId string }
 	}
 	if err := json.Unmarshal(out, &r); err != nil {
 		return "", fmt.Errorf("read restored table %s: %w", table, err)
 	}
-	return r.TableDescription.TableArn, nil
+	return r.TableDescription.TableId, nil
 }
 
 // TTL returns the TTL attribute, or "" when TTL is off.

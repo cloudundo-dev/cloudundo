@@ -81,8 +81,8 @@ func TestUndoTableDelete(t *testing.T) {
 	if !w.f.HasTable("Users") {
 		t.Fatal("table not restored")
 	}
-	if e.Undo[0].RestoredArn == "" || e.Undo[0].RestoredArn != w.f.TableArn("Users") {
-		t.Fatalf("restored ARN not recorded: %q vs %q", e.Undo[0].RestoredArn, w.f.TableArn("Users"))
+	if e.Undo[0].RestoredID == "" || e.Undo[0].RestoredID != w.f.TableID("Users") {
+		t.Fatalf("restored id not recorded: %q vs %q", e.Undo[0].RestoredID, w.f.TableID("Users"))
 	}
 	w.wantItem(u1Key, u1)
 	w.wantItem(u2Key, u2)
@@ -171,7 +171,7 @@ func TestUndoTableBackupGone(t *testing.T) {
 	if _, err := p.Apply(context.Background()); err == nil {
 		t.Fatal("restore from a missing backup should fail")
 	}
-	if e.Undo[0].RestoredArn != "" {
+	if e.Undo[0].RestoredID != "" {
 		t.Fatal("failed restore must not be recorded")
 	}
 }

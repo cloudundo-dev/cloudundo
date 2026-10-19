@@ -24,6 +24,7 @@ type version struct {
 }
 
 type table struct {
+	id         string
 	arn        string
 	status     string
 	keyAttrs   []string
@@ -69,6 +70,13 @@ type Fake struct {
 	Env [][]string
 	// Fail makes any call whose joined args contain the key fail with the value as stderr.
 	Fail map[string]string
+
+	dbs, clusters map[string]*fdb
+	dbSnaps       map[string]*fsnap
+	caches        map[string]*fcache
+	// SnapshotPolls is how many describe calls report a new RDS snapshot
+	// as "creating".
+	SnapshotPolls int
 }
 
 // New returns an empty fake account.
@@ -261,8 +269,13 @@ func (f *Fake) Run(_ context.Context, env []string, args ...string) ([]byte, err
 	if len(clean) < 2 {
 		return errOut("usage")
 	}
-	if clean[0] == "dynamodb" {
+	switch clean[0] {
+	case "dynamodb":
 		return f.dynamo(clean[1], flags, args)
+	case "rds":
+		return f.rdsCall(clean[1], flags, args)
+	case "elasticache":
+		return f.cacheCall(clean[1], flags, args)
 	}
 	name := flags["bucket"]
 	b := f.buckets[name]

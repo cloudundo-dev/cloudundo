@@ -79,6 +79,8 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 			err = planItems(ctx, c, *s, &p, dataDir, e.ID)
 		case "ddb-table-backup":
 			err = planTable(ctx, c, s, &p)
+		case "rds-snapshot":
+			err = planDB(ctx, c, s, &p)
 		default:
 			err = fmt.Errorf("unknown undo step %q (journal from a newer cloudundo?)", s.Kind)
 		}

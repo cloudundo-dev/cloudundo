@@ -182,6 +182,12 @@ func iamOf(args []string) [][2]string {
 		return [][2]string{{"dynamodb:RestoreTableFromBackup", flag(args, "backup-arn")}}
 	case "dynamodb put-item":
 		return [][2]string{{"dynamodb:PutItem", table}}
+	case "rds delete-db-snapshot":
+		return [][2]string{{"rds:DeleteDBSnapshot", "arn:aws:rds:us-east-1:123456789012:snapshot:" + flag(args, "db-snapshot-identifier")}}
+	case "rds create-db-snapshot":
+		return [][2]string{{"rds:CreateDBSnapshot", "arn:aws:rds:us-east-1:123456789012:snapshot:" + flag(args, "db-snapshot-identifier")}}
+	case "rds restore-db-instance-from-db-snapshot":
+		return [][2]string{{"rds:RestoreDBInstanceFromDBSnapshot", "arn:aws:rds:us-east-1:123456789012:snapshot:" + flag(args, "db-snapshot-identifier")}}
 	}
 	return nil
 }
@@ -264,6 +270,16 @@ func TestCloudundoStillWorksUnderThePolicy(t *testing.T) {
 			t.Fatal("item not back")
 		}
 	})
+	t.Run("database delete", func(t *testing.T) {
+		w := newWorld(t)
+		w.f.CreateDB(awscli.DBInfo{ID: "db1", Engine: "postgres", Class: "db.t4g.micro"}, "rows")
+		e := w.protect("aws rds delete-db-instance --db-instance-identifier db1 --skip-final-snapshot")
+		w.f.DropDB("db1", false, "")
+		w.undo(e)
+		if _, data, ok := w.f.DB("db1", false); !ok || data != "rows" {
+			t.Fatal("database not back")
+		}
+	})
 	t.Run("item delete", func(t *testing.T) {
 		w := newWorld(t)
 		w.f.CreateTable("T", "pk")
@@ -289,6 +305,7 @@ func TestThePolicyStopsWhatTheHookCannotSee(t *testing.T) {
 		{"s3api", "put-bucket-policy", "--bucket", backup},
 		{"s3api", "delete-object", "--bucket", "user-data", "--key", "k", "--version-id", "v1"},
 		{"dynamodb", "delete-backup", "--backup-arn", tableBackup},
+		{"rds", "delete-db-snapshot", "--db-snapshot-identifier", "cloudundo-prod-db-20261019-090000"},
 	} {
 		if _, err := w.g.Run(context.Background(), nil, args...); !awscli.Has(err, "AccessDenied") {
 			t.Errorf("%v allowed", args)

@@ -117,7 +117,7 @@ func planTable(ctx context.Context, c awscli.Client, s *journal.UndoStep, p *Pla
 				if err != nil {
 					return err
 				}
-				s.RestoredArn = arn
+				s.RestoredID = arn
 				s.SettingsApplied = false
 				return nil
 			},
@@ -127,17 +127,17 @@ func planTable(ctx context.Context, c awscli.Client, s *journal.UndoStep, p *Pla
 		p.Pending = true
 		return nil
 
-	case s.RestoredArn == "" && info.Status == "DELETING":
+	case s.RestoredID == "" && info.Status == "DELETING":
 		p.Notes = append(p.Notes, fmt.Sprintf("%s is still being deleted. Run the same undo again in a minute.", s.Table))
 		p.Pending = true
 		return nil
 
-	case s.RestoredArn == "":
+	case s.RestoredID == "":
 		p.Notes = append(p.Notes, fmt.Sprintf(
 			"DynamoDB table %s still exists, so there is nothing to restore. The backup %s is kept.", s.Table, s.BackupArn))
 		return nil
 
-	case info.Arn != s.RestoredArn:
+	case info.ID != s.RestoredID:
 		p.Notes = append(p.Notes, fmt.Sprintf(
 			"A different table named %s exists now, so it is left alone. The backup %s is kept.", s.Table, s.BackupArn))
 		return nil

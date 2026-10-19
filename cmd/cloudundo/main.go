@@ -1,8 +1,8 @@
 // Command cloudundo makes what an AI agent deletes in AWS recoverable.
 //
-// "protect" runs before an agent's command: it makes the command's S3 and
-// DynamoDB changes recoverable, or blocks the command. "undo" puts the
-// data back.
+// "protect" runs before an agent's command: it makes the command's S3,
+// DynamoDB and RDS changes recoverable, or blocks the command. "undo" puts
+// the data back.
 package main
 
 import (
@@ -122,7 +122,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(effs) == 0 {
-		fmt.Fprintln(stdout, "No S3 or DynamoDB data changes found.")
+		fmt.Fprintln(stdout, "No data changes found.")
 		return 0
 	}
 	for _, e := range effs {
@@ -197,12 +197,35 @@ func describe(e effects.Effect) string {
 		verb = "DELETE    "
 	case effects.OverwriteItems:
 		verb = "OVERWRITE "
+	case effects.DeleteDatabase:
+		verb = "DELETE DATABASE"
+	case effects.DeleteCache:
+		verb = "DELETE CACHE"
+	case effects.EraseCacheData:
+		verb = "ERASE CACHE"
 	default:
 		verb = string(e.Kind)
 	}
 
 	var target string
 	switch {
+	case e.Service == "rds":
+		target = "rds:" + e.Database
+		if e.Cluster {
+			target = "rds-cluster:" + e.Database
+		}
+		if e.SkipFinalSnapshot {
+			target += " (no final snapshot)"
+		} else if e.FinalSnapshot != "" {
+			target += " (final snapshot " + e.FinalSnapshot + ")"
+		}
+	case e.Service == "elasticache":
+		target = "elasticache:" + e.Cache
+		if e.FinalSnapshot != "" {
+			target += " (final snapshot " + e.FinalSnapshot + ")"
+		}
+	case e.Service == "redis":
+		target = "redis server"
 	case e.Service == "dynamodb":
 		target = "dynamodb:" + e.Table
 		if e.Table == "" || e.Table == "?" {
@@ -217,7 +240,7 @@ func describe(e effects.Effect) string {
 		target = "s3://" + e.Bucket
 	}
 	switch {
-	case e.Service == "dynamodb":
+	case e.Service != "s3":
 	case e.Key != "":
 		target += "/" + e.Key
 	case e.Recursive:

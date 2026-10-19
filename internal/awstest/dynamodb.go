@@ -12,7 +12,9 @@ import (
 func (f *Fake) CreateTable(name string, keyAttrs ...string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.nextID++
 	f.tables[name] = &table{
+		id:       fmt.Sprintf("tbl-%04d", f.nextID),
 		arn:      fmt.Sprintf("arn:aws:dynamodb:us-east-1:%s:table/%s", f.Account, name),
 		status:   "ACTIVE",
 		keyAttrs: keyAttrs,
@@ -42,6 +44,16 @@ func (f *Fake) TableSettings(name string) (string, map[string]string, bool, stri
 		tags[tg["Key"]] = tg["Value"]
 	}
 	return t.ttl, tags, t.pitr, t.stream
+}
+
+// TableID returns the table's unique id, or "".
+func (f *Fake) TableID(name string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if t := f.tables[name]; t != nil {
+		return t.id
+	}
+	return ""
 }
 
 // TableArn returns the table's ARN, or "".
@@ -154,7 +166,7 @@ func (f *Fake) dynamo(op string, flags map[string]string, args []string) ([]byte
 			}
 			ks = append(ks, map[string]string{"AttributeName": a, "KeyType": kt})
 		}
-		desc := map[string]any{"TableArn": t.arn, "TableStatus": status, "KeySchema": ks,
+		desc := map[string]any{"TableId": t.id, "TableArn": t.arn, "TableStatus": status, "KeySchema": ks,
 			"DeletionProtectionEnabled": t.protection}
 		if t.stream != "" {
 			desc["StreamSpecification"] = map[string]any{"StreamEnabled": true, "StreamViewType": t.stream}
@@ -226,7 +238,9 @@ func (f *Fake) dynamo(op string, flags map[string]string, args []string) ([]byte
 		}
 		f.nextID++
 		restored := &table{
-			arn:           fmt.Sprintf("arn:aws:dynamodb:us-east-1:%s:table/%s-r%d", f.Account, target, f.nextID),
+			// Like AWS: same name, same ARN, new id.
+			id:            fmt.Sprintf("tbl-%04d", f.nextID),
+			arn:           fmt.Sprintf("arn:aws:dynamodb:us-east-1:%s:table/%s", f.Account, target),
 			status:        "ACTIVE",
 			keyAttrs:      b.table.keyAttrs,
 			items:         map[string]string{},
@@ -237,7 +251,7 @@ func (f *Fake) dynamo(op string, flags map[string]string, args []string) ([]byte
 			restored.items[k] = v
 		}
 		f.tables[target] = restored
-		return js(map[string]any{"TableDescription": map[string]string{"TableArn": restored.arn, "TableStatus": "CREATING"}})
+		return js(map[string]any{"TableDescription": map[string]string{"TableId": restored.id, "TableArn": restored.arn, "TableStatus": "CREATING"}})
 
 	case "describe-time-to-live":
 		if t == nil {

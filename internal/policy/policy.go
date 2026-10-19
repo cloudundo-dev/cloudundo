@@ -102,6 +102,15 @@ func Build(o Options) Document {
 			},
 		},
 		{
+			Sid:    "KeepCloudundoDBSnapshots",
+			Effect: "Deny",
+			Action: []string{"rds:DeleteDBSnapshot", "rds:DeleteDBClusterSnapshot"},
+			Resource: []string{
+				fmt.Sprintf("arn:aws:rds:%s:%s:snapshot:cloudundo-*", region, acct),
+				fmt.Sprintf("arn:aws:rds:%s:%s:cluster-snapshot:cloudundo-*", region, acct),
+			},
+		},
+		{
 			Sid:      "KeepDynamoDBBackups",
 			Effect:   "Deny",
 			Action:   []string{"dynamodb:DeleteBackup"},

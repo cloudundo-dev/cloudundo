@@ -59,10 +59,16 @@ type UndoStep struct {
 	ItemsFile   string       `json:"items_file,omitempty"`
 	BackupArn   string       `json:"backup_arn,omitempty"`
 	TableConfig *TableConfig `json:"table_config,omitempty"`
-	// RestoredArn is set once undo has restored the table, so a later
-	// undo run can finish putting its settings back.
-	RestoredArn     string `json:"restored_arn,omitempty"`
+	// RestoredID is the unique id (DynamoDB TableId, RDS resource id) of
+	// what undo restored, so a later run can finish its settings and tell
+	// it apart from a new resource with the same name (names and ARNs repeat).
+	RestoredID      string `json:"restored_id,omitempty"`
 	SettingsApplied bool   `json:"settings_applied,omitempty"`
+
+	// RDS: "rds-snapshot" restores DB (an instance, or an Aurora cluster)
+	// from Snapshot with the settings recorded before the delete.
+	DB       *awscli.DBInfo `json:"db,omitempty"`
+	Snapshot string         `json:"snapshot,omitempty"`
 }
 
 // TableConfig is the part of a DynamoDB table a backup restore leaves out.

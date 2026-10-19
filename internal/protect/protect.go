@@ -32,12 +32,17 @@ type Config struct {
 	Sleep      func(time.Duration)
 	// MaxItems is the most DynamoDB items saved one by one per command.
 	MaxItems int
+	// SnapshotWait is how long to wait for an RDS snapshot before
+	// blocking (the agent can retry; the snapshot is reused).
+	SnapshotWait time.Duration
+	SnapshotPoll time.Duration
 }
 
 // Defaults: 7 days, 5 GiB, wait up to 60 s for a table backup, 100 items.
 func Defaults() Config {
 	return Config{RetentionDays: 7, MaxCopyBytes: 5 << 30, Now: time.Now,
-		BackupWait: 60 * time.Second, Sleep: time.Sleep, MaxItems: 100}
+		BackupWait: 60 * time.Second, Sleep: time.Sleep, MaxItems: 100,
+		SnapshotWait: 7 * time.Minute, SnapshotPoll: 10 * time.Second}
 }
 
 // Result is the outcome for one command.
@@ -74,6 +79,8 @@ func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Co
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
 				"cannot tell exactly what %q would change (%s). Use explicit bucket and key names, or run it yourself.",
 				e.Command, target(e)))
+		case e.Kind == effects.EraseCacheData:
+			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %s. Run it yourself if you mean it.", e.Command, e.Detail))
 		case e.Kind == effects.WeakenProtection:
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
 				"%q %s, which makes data loss on %s harder or impossible to undo. Run it yourself if you mean it.",
@@ -115,6 +122,18 @@ func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Co
 			if !r.saveItems(ctx, c, e, since, saved, cfg) {
 				return r.fail()
 			}
+		case effects.DeleteDatabase:
+			if !r.dbSnapshot(ctx, c, e, since, cfg) {
+				return r.fail()
+			}
+		case effects.DeleteCache:
+			if !r.cacheDelete(ctx, c, e) {
+				return r.fail()
+			}
+		default:
+			// Fail closed: a kind this version cannot protect is blocked.
+			r.Blocked = append(r.Blocked, fmt.Sprintf("cloudundo cannot protect %q (%s) yet.", e.Command, e.Kind))
+			return r.fail()
 		}
 	}
 	r.Allowed = true
@@ -302,6 +321,18 @@ func (r *Result) bucketCopy(ctx context.Context, c awscli.Client, e effects.Effe
 }
 
 func target(e effects.Effect) string {
+	switch e.Service {
+	case "rds":
+		if !e.Uncertain && e.Database != "" && e.Database != "?" {
+			return "RDS " + e.Database
+		}
+		return "an RDS database"
+	case "elasticache":
+		if !e.Uncertain && e.Cache != "" {
+			return "cache " + e.Cache
+		}
+		return "an ElastiCache cache"
+	}
 	if e.Service == "dynamodb" {
 		if e.Table == "" || e.Table == "?" {
 			return "a DynamoDB table"
