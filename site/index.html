@@ -115,10 +115,11 @@ td code { font-size: 0.85em; }
 .limits li { border-left: 2px solid var(--line); padding-left: 16px; color: var(--muted); }
 .limits strong { color: var(--fg); font-weight: 600; display: block; }
 
-.agents { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.agents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; }
 .agent { display: grid; gap: 10px; align-content: start; min-width: 0; }
 .agent pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 0.8rem; overflow-x: auto; }
 .agent p { color: var(--muted); font-size: 0.93rem; }
+.agent p code { white-space: nowrap; }
 
 .why { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
 .why p + p { margin-top: 14px; }
@@ -260,6 +261,11 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
         <h3>Codex</h3>
         <pre>cloudundo install codex --write</pre>
         <p>Then run <code>/hooks</code> in Codex and trust the hook.</p>
+      </div>
+      <div class="agent">
+        <h3>Your own agent</h3>
+        <pre>cloudundo protect -- "&lt;the command&gt;"</pre>
+        <p>Call it before each shell command your agent runs. Exit code 0: run it. Anything else: don't. <a href="https://github.com/OWNER/cloudundo#your-own-agent">Example</a></p>
       </div>
     </div>
   </section>

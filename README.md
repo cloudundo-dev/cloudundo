@@ -48,6 +48,26 @@ Without `--write` it only prints what to add. With it, cloudundo keeps your othe
 
 From then on the agent runs `cloudundo hook <agent>` before every shell command. Commands that do not touch AWS data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
 
+### Your own agent
+
+If you built your own agent and it runs shell commands, ask cloudundo before each one. Run it in the same folder and environment the command will use. Exit code `0` means the data is protected and the command can run. Anything else means do not run it.
+
+```python
+import subprocess
+
+def run_agent_command(command: str, cwd: str) -> str:
+    guard = subprocess.run(["cloudundo", "protect", "--", command],
+                           cwd=cwd, capture_output=True, text=True)
+    if guard.returncode != 0:
+        return "Not run. cloudundo said:\n" + guard.stderr
+    result = subprocess.run(command, shell=True, cwd=cwd, capture_output=True, text=True)
+    return guard.stderr + result.stdout + result.stderr
+```
+
+Return cloudundo's message to the model either way, so it knows what was protected or why the command was stopped. `cloudundo protect --json` gives the same result as JSON.
+
+If your agent calls AWS from code (boto3, the AWS SDK) instead of running commands, cloudundo cannot see those calls. See the limits below.
+
 ## How it works
 
 The hook calls the same logic as `cloudundo protect`, which you can also run yourself:
@@ -102,7 +122,7 @@ Things to know:
 Plainly, so you can decide where it fits:
 
 - **cloudundo is a seatbelt for mistakes, not a lock against a hostile agent.** The agent still holds your AWS keys. cloudundo makes the deletes it sees recoverable; it does not take the keys away.
-- **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script, an SDK call or `terraform apply` that deletes data is not seen by the hook. The policy below closes part of this gap.
+- **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script or an SDK call (such as boto3) that deletes data is not seen by the hook. The policy below closes part of this gap.
 - **Data deleted from inside a database is not seen.** `DROP TABLE` or `DELETE FROM` through `psql` or `mysql` goes straight to the database, not through the AWS CLI. Use your database's own backups (RDS automated backups, point-in-time recovery) for that.
 - **S3, DynamoDB, RDS and ElastiCache**, through the AWS CLI or Terraform. EBS, EFS, other clouds: not yet. Terraform restores the data, not the infrastructure around it (networks, load balancers, IAM): re-apply your Terraform for those.
 - **A plan that deletes data cloudundo cannot back up yet** (EBS volumes, EFS, Redshift, DocumentDB, OpenSearch, KMS keys and similar) is blocked, with the resource named, instead of running unprotected.
