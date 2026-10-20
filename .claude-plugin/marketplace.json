@@ -1,0 +1,16 @@
+{
+  "name": "cloudundo",
+  "description": "Undo for the AWS data your coding agent deletes.",
+  "owner": {
+    "name": "Youssef Khalil"
+  },
+  "plugins": [
+    {
+      "name": "cloudundo",
+      "source": "./plugin",
+      "description": "Before Claude Code deletes or overwrites S3, DynamoDB or RDS data (directly or through Terraform), cloudundo makes it recoverable; `cloudundo undo` brings it back.",
+      "category": "security",
+      "tags": ["aws", "terraform", "backup", "undo", "safety", "hooks"]
+    }
+  ]
+}

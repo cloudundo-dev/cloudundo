@@ -28,7 +28,14 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | s
 
 Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
 
-Then add the hook to your agent:
+Then add the hook to your agent. For Claude Code, the plugin is the easiest way:
+
+```
+/plugin marketplace add OWNER/cloudundo
+/plugin install cloudundo@cloudundo
+```
+
+Use either the plugin or `cloudundo install claude-code`, not both, or every command is checked twice. Or add the hook yourself:
 
 ```sh
 cloudundo install claude-code --write   # ~/.claude/settings.json
@@ -38,7 +45,7 @@ cloudundo install codex --write         # ~/.codex/hooks.json, then run /hooks i
 
 Without `--write` it only prints what to add. With it, cloudundo keeps your other settings, saves the old file next to it (`*.before-cloudundo`), and never adds itself twice.
 
-From then on the agent runs `cloudundo hook <agent>` before every shell command. Commands that do not touch S3 or DynamoDB data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
+From then on the agent runs `cloudundo hook <agent>` before every shell command. Commands that do not touch AWS data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
 
 ## How it works
 

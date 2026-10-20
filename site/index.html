@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cloudundo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Undo for the AWS data your AI coding agent deletes. Before a command deletes S3, DynamoDB or RDS data, directly or through Terraform, cloudundo makes it recoverable.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, opened by a terminal transcript of a delete and its undo; then the sequence, the coverage table, the limits, and setup per agent. */
+:root {
+  --bg: #f2f5f8;
+  --surface: #ffffff;
+  --fg: #111a25;
+  --muted: #566476;
+  --line: #d3dae3;
+  --accent: #1d59cf;
+  --accent-soft: #e3ecfb;
+  --deleted: #b4321f;
+  --restored: #137a3d;
+  --term-bg: #121a25;
+  --term-fg: #dce4ee;
+  --term-dim: #8394a8;
+  --font-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d131a; --surface: #131b25; --fg: #e5ebf2; --muted: #94a3b5; --line: #243142;
+    --accent: #7aa5ff; --accent-soft: #19253a; --deleted: #ff8f7d; --restored: #5ad38a;
+    --term-bg: #0a0f15; --term-fg: #dce4ee; --term-dim: #7e8ea2; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d131a; --surface: #131b25; --fg: #e5ebf2; --muted: #94a3b5; --line: #243142;
+  --accent: #7aa5ff; --accent-soft: #19253a; --deleted: #ff8f7d; --restored: #5ad38a;
+  --term-bg: #0a0f15; --term-fg: #dce4ee; --term-dim: #7e8ea2; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 980px; margin: 0 auto; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+code, pre, .mono { font-family: var(--font-mono); }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.1; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); letter-spacing: -0.01em; }
+h3 { font-size: 1.15rem; }
+p { margin: 0; }
+
+/* Top bar */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 20px; }
+.brand { font-family: var(--font-mono); font-weight: 500; font-size: 1.05rem; color: var(--fg); text-decoration: none; }
+.brand span { color: var(--accent); }
+.top nav { display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.95rem; }
+.top nav a { color: var(--muted); text-decoration: none; }
+.top nav a:hover { color: var(--fg); }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; padding-block: 40px 64px; }
+.hero .lede { max-width: 40em; }
+.hero .install { max-width: 760px; }
+.hero h1 { max-width: 16em; font-size: clamp(2.3rem, 5.4vw, 3.8rem); font-weight: 700; letter-spacing: -0.02em; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.lede { margin-top: 20px; font-size: 1.12rem; color: var(--muted); max-width: 34em; }
+.install { margin-top: 28px; display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.install code { flex: 1; min-width: 0; padding: 12px 14px; font-size: 0.86rem; white-space: nowrap; overflow-x: auto; }
+.install button { border: 0; border-left: 1px solid var(--line); background: var(--accent-soft); color: var(--accent); font: 600 0.85rem var(--font-body); padding: 0 16px; cursor: pointer; }
+.hero .links { margin-top: 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.95rem; }
+
+/* Terminal transcript */
+.term { background: var(--term-bg); color: var(--term-fg); border-radius: 10px; font: 0.82rem/1.65 var(--font-mono); padding: 18px 20px; overflow-x: auto; min-width: 0; box-shadow: 0 18px 40px -24px rgba(10, 20, 35, 0.6); }
+.term .bar { display: flex; gap: 6px; margin-bottom: 14px; }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #2b3746; display: block; }
+.term .line { white-space: pre; }
+.term .p { color: var(--term-dim); }
+.term .cmd { color: #ffffff; }
+.term .who { color: #f2c46d; }
+.term .ok { color: #7fe0a6; }
+.term .del { color: #ff9b8a; }
+.term .gap { height: 10px; }
+
+/* Sections */
+section { padding-block: 56px; border-top: 1px solid var(--line); }
+.section-head { display: grid; gap: 10px; max-width: 40em; margin-bottom: 32px; }
+.section-head p { color: var(--muted); }
+
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; list-style: none; margin: 0; padding: 0; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; gap: 8px; align-content: start; }
+.steps li::before { content: counter(step); font: 600 0.8rem var(--font-mono); color: var(--accent); border: 1px solid var(--accent); border-radius: 50%; width: 28px; height: 28px; display: grid; place-items: center; }
+.steps p { color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 0.93rem; min-width: 640px; }
+th, td { text-align: left; padding: 14px 16px; vertical-align: top; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 0.75rem var(--font-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+td:first-child { font-weight: 600; white-space: nowrap; }
+td code { font-size: 0.85em; }
+.blocked { color: var(--deleted); font-weight: 600; }
+
+.limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 40px; list-style: none; padding: 0; margin: 0; }
+.limits li { border-left: 2px solid var(--line); padding-left: 16px; color: var(--muted); }
+.limits strong { color: var(--fg); font-weight: 600; display: block; }
+
+.agents { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.agent { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.agent pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 0.8rem; overflow-x: auto; }
+.agent p { color: var(--muted); font-size: 0.93rem; }
+
+.why { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
+.why p + p { margin-top: 14px; }
+.why .quote { font-family: var(--font-display); font-size: 1.35rem; line-height: 1.35; }
+
+footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var(--muted); font-size: 0.9rem; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 820px) {
+  .why { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .steps, .agents, .limits { grid-template-columns: minmax(0, 1fr); }
+  .top nav { gap: 14px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .term .line { animation: rise 0.4s ease-out both; }
+  .term .line:nth-child(n+6) { animation-delay: 0.15s; }
+  .term .line:nth-child(n+12) { animation-delay: 0.3s; }
+  @keyframes rise { from { opacity: 0.35; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#">cloud<span>undo</span></a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#covers">What it covers</a>
+      <a href="#setup">Set up</a>
+      <a href="https://github.com/OWNER/cloudundo">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Your agent can delete anything. <em>You can always get it back.</em></h1>
+      <p class="lede">cloudundo sits in front of the AWS and Terraform commands that Claude Code, Cursor and Codex run. Before a command deletes your S3, DynamoDB or RDS data, it makes that data recoverable. Then one command brings it back.</p>
+      <div class="install">
+        <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh</code>
+        <button type="button" id="copy-install" aria-label="Copy the install command">Copy</button>
+      </div>
+      <div class="links">
+        <a href="https://github.com/OWNER/cloudundo">Source on GitHub</a>
+        <a href="#limits">What it does not do</a>
+      </div>
+    </div>
+
+    <div class="term" role="img" aria-label="Terminal: an agent runs terraform destroy, cloudundo snapshots the database first, and cloudundo undo restores it">
+      <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="line"><span class="who">agent</span><span class="p"> $ </span><span class="cmd">terraform destroy -auto-approve</span></div>
+      <div class="line"><span class="p">cloudundo: protected #3</span></div>
+      <div class="line"><span class="ok">  + made snapshot cloudundo-courses-db-20261019-221500 of database courses-db</span></div>
+      <div class="line"><span class="ok">  + copied 1204 objects (3.1 GB) from s3://course-uploads to s3://cloudundo-backup-…</span></div>
+      <div class="line"><span class="ok">  + made on-demand backup cloudundo-sessions-… of DynamoDB table sessions</span></div>
+      <div class="line"><span class="p">  Undo with: cloudundo undo 3</span></div>
+      <div class="line"><span class="del">aws_db_instance.main: Destruction complete after 6m12s</span></div>
+      <div class="line"><span class="del">Destroy complete! Resources: 9 destroyed.</span></div>
+      <div class="gap"></div>
+      <div class="line"><span class="who">you</span><span class="p">   $ </span><span class="cmd">cloudundo undo 3 --yes</span></div>
+      <div class="line"><span class="p">  - restore database courses-db from snapshot cloudundo-courses-db-… with its old settings</span></div>
+      <div class="line"><span class="p">  - recreate s3://course-uploads in us-east-1</span></div>
+      <div class="line"><span class="p">  - copy 1204 objects from s3://cloudundo-backup-… back into s3://course-uploads</span></div>
+      <div class="line"><span class="p">  - restore DynamoDB table sessions from backup arn:aws:dynamodb:…</span></div>
+      <div class="line"><span class="ok">Started (4 steps). Run `cloudundo undo 3 --yes` again in a few minutes to finish.</span></div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="section-head">
+      <h2>How it works</h2>
+      <p>The agent keeps working as usual. cloudundo only steps in when a command would destroy data, and only to make it recoverable first.</p>
+    </div>
+    <ol class="steps">
+      <li>
+        <h3>The agent runs a command</h3>
+        <p>Every shell command passes through the agent's hook. cloudundo reads it, including <code>&amp;&amp;</code> chains, <code>bash -c</code>, <code>cd</code> and Terraform plans. Anything that touches no data runs untouched.</p>
+      </li>
+      <li>
+        <h3>The data is made recoverable</h3>
+        <p>Versioning for S3 objects, a verified copy of a bucket, a backup of a table, a snapshot of a database. If any of it fails, the command does not run.</p>
+      </li>
+      <li>
+        <h3>You undo it</h3>
+        <p><code>cloudundo undo 3</code> shows what it would restore. <code>--yes</code> restores it. Undo never deletes anything, so an undo can be undone too.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="covers">
+    <div class="section-head">
+      <h2>What it covers</h2>
+      <p>Through the AWS CLI or a <code>terraform apply</code> / <code>destroy</code>, whose plan cloudundo reads first without applying anything.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Before the command</th><th><code>cloudundo undo</code></th></tr></thead>
+        <tbody>
+          <tr><td>S3 objects</td><td>Turns on versioning, with old versions kept 7 days</td><td>Brings back deleted objects and earlier versions</td></tr>
+          <tr><td>S3 buckets</td><td>Copies the bucket (up to 5 GB) to a private backup bucket and checks the copy</td><td>Recreates the bucket and copies the objects back</td></tr>
+          <tr><td>DynamoDB</td><td>On-demand backup of a table; saved copies of single items</td><td>Restores the table with its TTL, tags and streams; puts items back</td></tr>
+          <tr><td>RDS, Aurora</td><td>Takes a snapshot and waits until it is ready, or uses the final snapshot the command asks for</td><td>Restores the database under the same name, size, network and security groups</td></tr>
+          <tr><td>ElastiCache</td><td>Lets a delete run only if a final snapshot is kept</td><td>Create a new cache from that snapshot</td></tr>
+          <tr><td>Unclear commands</td><td colspan="2"><span class="blocked">Blocked:</span> a bucket in a <code>$VARIABLE</code>, <code>redis-cli FLUSHALL</code>, deleting backups, turning off versioning</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="limits">
+    <div class="section-head">
+      <h2>What it does not do</h2>
+      <p>Know where the edges are before you rely on it.</p>
+    </div>
+    <ul class="limits">
+      <li><strong>It is a seatbelt, not a lock.</strong>The agent still holds your AWS keys. <code>cloudundo policy</code> prints an IAM policy that stops those keys from deleting the backups.</li>
+      <li><strong>It sees commands, not programs.</strong>A Python script, an SDK call or <code>make destroy</code> that deletes data is not seen.</li>
+      <li><strong>Not inside the database.</strong><code>DROP TABLE</code> through <code>psql</code> goes straight to the database. Use RDS point-in-time recovery for that.</li>
+      <li><strong>AWS only, for now.</strong>Supabase, Railway, GCP and Azure are not covered yet.</li>
+    </ul>
+  </section>
+
+  <section id="setup">
+    <div class="section-head">
+      <h2>Set up</h2>
+      <p>Install the program once, then add the hook to the agent you use. The hook never approves a command for you; your agent's permission prompts stay as they are.</p>
+    </div>
+    <div class="agents">
+      <div class="agent">
+        <h3>Claude Code</h3>
+        <pre>/plugin marketplace add OWNER/cloudundo
+/plugin install cloudundo@cloudundo</pre>
+        <p>Or without the plugin: <code>cloudundo install claude-code --write</code></p>
+      </div>
+      <div class="agent">
+        <h3>Cursor</h3>
+        <pre>cloudundo install cursor --write</pre>
+        <p>Adds a fail-closed hook to <code>~/.cursor/hooks.json</code>. Restart Cursor.</p>
+      </div>
+      <div class="agent">
+        <h3>Codex</h3>
+        <pre>cloudundo install codex --write</pre>
+        <p>Then run <code>/hooks</code> in Codex and trust the hook.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="why">
+    <p class="quote">AI coding agents have wiped production databases, their snapshots and terabytes of S3 data, often in seconds.</p>
+    <div>
+      <p>Most guardrails try to block risky commands, which slows agents down until people switch the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be taken back.</p>
+      <p>It is a single program with no dependencies, open source under Apache 2.0, and it calls your own <code>aws</code> CLI with the same account and region as the agent's command.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>cloudundo · Apache 2.0</span>
+    <a href="https://github.com/OWNER/cloudundo">github.com/OWNER/cloudundo</a>
+  </footer>
+</div>
+<script>
+(function () {
+  var button = document.getElementById("copy-install");
+  var code = document.getElementById("install-cmd");
+  button.addEventListener("click", function () {
+    var text = code.textContent;
+    var done = function () { button.textContent = "Copied"; setTimeout(function () { button.textContent = "Copy"; }, 1600); };
+    var select = function () {
+      var range = document.createRange();
+      range.selectNodeContents(code);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      button.textContent = "Press Ctrl+C";
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, select);
+    } else {
+      select();
+    }
+  });
+})();
+</script>
+</body>
+</html>
