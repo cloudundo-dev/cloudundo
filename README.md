@@ -28,18 +28,19 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | s
 
 Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
 
-Then add the hook to your agent. For Claude Code, the plugin is the easiest way:
+Then add the hook to your agent.
 
-```
-/plugin marketplace add OWNER/cloudundo
-/plugin install cloudundo@cloudundo
-```
+**Claude Code** has two ways that give the same protection. Pick one, not both, or every command is checked twice.
 
-Use either the plugin or `cloudundo install claude-code`, not both, or every command is checked twice. Or add the hook yourself:
+| Option A: the plugin | Option B: one command |
+|---|---|
+| Inside Claude Code:<br>`/plugin marketplace add OWNER/cloudundo`<br>`/plugin install cloudundo@cloudundo` | In your terminal:<br>`cloudundo install claude-code --write` |
+| Turn it off or remove it from the `/plugin` menu. Warns you at start-up if the cloudundo program is missing. | Writes the hook into `~/.claude/settings.json`. |
+
+**Cursor and Codex:**
 
 ```sh
-cloudundo install claude-code --write   # ~/.claude/settings.json
-cloudundo install cursor --write        # ~/.cursor/hooks.json
+cloudundo install cursor --write        # ~/.cursor/hooks.json, then restart Cursor
 cloudundo install codex --write         # ~/.codex/hooks.json, then run /hooks in Codex to trust it
 ```
 
