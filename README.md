@@ -20,7 +20,9 @@ AI coding agents have deleted real data: a Codex session reduced a 3 TB S3 bucke
 
 ## Set up
 
-Install (Linux, macOS, or WSL on Windows). The script checks the download's SHA-256 before installing it to `~/.local/bin`:
+Two steps, whatever agent you use.
+
+**Step 1: install cloudundo** on the machine where your agent runs commands (Linux, macOS, or WSL on Windows). The script checks the download's SHA-256 before installing it to `~/.local/bin`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
@@ -28,25 +30,20 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | s
 
 Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
 
-Then add the hook to your agent.
+**Step 2: connect it to your agent**, so the agent asks cloudundo before every command:
 
-**Claude Code** has two ways that give the same protection. Pick one, not both, or every command is checked twice.
-
-| Option A: the plugin | Option B: one command |
+| Agent | Step 2 |
 |---|---|
-| Inside Claude Code:<br>`/plugin marketplace add OWNER/cloudundo`<br>`/plugin install cloudundo@cloudundo` | In your terminal:<br>`cloudundo install claude-code --write` |
-| Turn it off or remove it from the `/plugin` menu. Warns you at start-up if the cloudundo program is missing. | Writes the hook into `~/.claude/settings.json`. |
+| Claude Code | `cloudundo install claude-code --write`<br>or the plugin: `/plugin marketplace add OWNER/cloudundo` then `/plugin install cloudundo@cloudundo` |
+| Cursor | `cloudundo install cursor --write`, then restart Cursor |
+| Codex | `cloudundo install codex --write`, then run `/hooks` in Codex to trust it |
+| Your own agent | Add five lines to your code ([below](#your-own-agent)) |
 
-**Cursor and Codex:**
+For Claude Code, use the command or the plugin, not both, or every command is checked twice.
 
-```sh
-cloudundo install cursor --write        # ~/.cursor/hooks.json, then restart Cursor
-cloudundo install codex --write         # ~/.codex/hooks.json, then run /hooks in Codex to trust it
-```
+`install` keeps your other settings and saves the old file next to it (`*.before-cloudundo`). Without `--write` it only prints what it would add.
 
-Without `--write` it only prints what to add. With it, cloudundo keeps your other settings, saves the old file next to it (`*.before-cloudundo`), and never adds itself twice.
-
-From then on the agent runs `cloudundo hook <agent>` before every shell command. Commands that do not touch AWS data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
+That's it. Commands that do not touch AWS data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
 
 ### Your own agent
 
