@@ -16,7 +16,9 @@ you:    cloudundo undo 1 --yes
 
 ## Why
 
-AI coding agents have deleted real data: a Codex session reduced a 3 TB S3 bucket to 34 KB, and a Cursor agent deleted a production database and its backups in nine seconds. Most guardrails try to *block* risky commands, which slows agents down until people turn the guardrails off. cloudundo takes the other route: let the agent work, and make sure every delete can be undone.
+AI coding agents have deleted real data. In March 2026 Claude Code ran `terraform destroy` on the wrong state and wiped a production database with 2.5 years of records, together with the snapshots meant to be its backup; AWS support restored it about a day later ([Tom's Hardware](https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-code-deletes-developers-production-setup-including-its-database-and-snapshots-2-5-years-of-records-were-nuked-in-an-instant)). That is the case cloudundo is built for: it reads the Terraform plan first, snapshots the database, and refuses commands that delete snapshots.
+
+Most guardrails try to *block* risky commands, which slows agents down until people turn the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be undone.
 
 ## Set up
 

@@ -24,7 +24,7 @@ aws sts get-caller-identity                  # MUST show the NEW account number
 mv cloudundo-darwin-arm64 cloudundo
 chmod +x cloudundo
 xattr -d com.apple.quarantine cloudundo 2>/dev/null   # Mac only
-./cloudundo version                                    # cloudundo 0.1.0-test
+./cloudundo version                                    # prints "cloudundo" and a version
 ```
 
 Every test below works the same way, like the agent hook will:
@@ -106,14 +106,20 @@ aws dynamodb get-item --table-name cu-test --key '{"pk":{"S":"u1"}}'   # must sh
 
 ## Test 7: Terraform destroys a database, a bucket and a table (about 40 minutes, mostly waiting)
 
-This is the February 2026 incident in small: an agent runs `terraform destroy` on an RDS database and its data.
+This is the Claude Code + Terraform incident (reported March 2026) in small: an agent runs `terraform destroy` on an RDS database and its data.
 It tests RDS and Terraform together. Cost: a few cents (or your account's free credits). Needs Terraform
 installed in Ubuntu (`terraform -version`).
 
+First give the test user RDS rights (it only has S3 and DynamoDB from step 0): in the console, IAM → Users →
+`cloudundo-test` → Add permissions → Attach policies directly → `AmazonRDSFullAccess`. Remove it again after the clean-up.
+Everything below runs in `us-east-1`, the region you gave `aws configure`.
+
 ```sh
+export AWS_PROFILE=cloudundo-test                     # the TEST account, for aws and terraform
+aws sts get-caller-identity                            # check the account number
 mkdir -p ~/cloudundo-test/tf && cd ~/cloudundo-test/tf
 cat > main.tf <<'TF'
-provider "aws" { region = "eu-west-1" }
+provider "aws" { region = "us-east-1" }
 variable "db_password" { sensitive = true }
 resource "aws_db_instance" "main" {
   identifier          = "cu-tf-db"
