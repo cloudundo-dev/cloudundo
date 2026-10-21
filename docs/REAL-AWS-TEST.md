@@ -12,7 +12,7 @@ On Windows, run everything inside WSL (Ubuntu). The commands below are for Mac /
 4. Install AWS CLI v2, then:
 
 ```sh
-aws configure --profile cloudundo-test      # paste the key, region: us-east-1, output: json
+aws configure --profile cloudundo-test      # paste the key, pick a region (for example us-west-1), output: json
 export AWS_PROFILE=cloudundo-test
 aws sts get-caller-identity                  # MUST show the NEW account number
 ```
@@ -112,19 +112,21 @@ installed in Ubuntu (`terraform -version`).
 
 First give the test user RDS rights (it only has S3 and DynamoDB from step 0): in the console, IAM → Users →
 `cloudundo-test` → Add permissions → Attach policies directly → `AmazonRDSFullAccess`. Remove it again after the clean-up.
-Everything below runs in `us-east-1`, the region you gave `aws configure`.
+Everything below runs in the region you gave `aws configure`; the `AWS_REGION` line passes it to Terraform too.
 
 ```sh
 export AWS_PROFILE=cloudundo-test                     # the TEST account, for aws and terraform
 aws sts get-caller-identity                            # check the account number
+export AWS_REGION=$(aws configure get region)          # the same region for aws and terraform
+echo $AWS_REGION                                       # for example us-west-1
 mkdir -p ~/cloudundo-test/tf && cd ~/cloudundo-test/tf
 cat > main.tf <<'TF'
-provider "aws" { region = "us-east-1" }
+provider "aws" {}                         # region comes from AWS_REGION
 variable "db_password" { sensitive = true }
 resource "aws_db_instance" "main" {
   identifier          = "cu-tf-db"
   engine              = "postgres"
-  instance_class      = "db.t4g.micro"
+  instance_class      = "db.t3.micro"
   allocated_storage   = 20
   username            = "cuadmin"
   password            = var.db_password
