@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/scripts/hook.sh\" codex",
+            "timeout": 600,
+            "statusMessage": "cloudundo: checking for AWS data changes"
+          }
+        ]
+      }
+    ]
+  }
+}

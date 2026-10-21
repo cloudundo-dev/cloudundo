@@ -1,7 +1,9 @@
 #!/bin/sh
-# Runs before every Bash command Claude Code wants to run. It hands the
+# Runs before every shell command the agent wants to run. It hands the
 # hook input to the cloudundo program, which protects the command's AWS
 # data or blocks it (exit 2).
+#
+# Usage: hook.sh [claude-code|cursor|codex]   (default: claude-code)
 #
 # Without the cloudundo program installed, commands that may touch AWS
 # data are blocked with a message saying how to install it; everything
@@ -21,8 +23,14 @@ find_cloudundo() {
   return 1
 }
 
+agent=${1:-claude-code}
+case "$agent" in
+  claude-code|cursor|codex) ;;
+  *) echo "cloudundo: blocked: unknown agent '$agent' in the plugin's hook" >&2; exit 2 ;;
+esac
+
 if bin=$(find_cloudundo); then
-  exec "$bin" hook claude-code
+  exec "$bin" hook "$agent"
 fi
 
 input=$(cat)

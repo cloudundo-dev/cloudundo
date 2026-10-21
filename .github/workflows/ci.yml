@@ -26,5 +26,7 @@ jobs:
         run: |
           go test -run='^$' -fuzz=FuzzAnalyze -fuzztime=30s ./internal/effects
           go test -run='^$' -fuzz=FuzzHookInput -fuzztime=30s ./cmd/cloudundo
+      - name: Plugins
+        run: go build -o /tmp/cloudundo-test ./cmd/cloudundo && test/plugin.sh /tmp/cloudundo-test
       - name: Build for every platform
         run: make release VERSION=ci

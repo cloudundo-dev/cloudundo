@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "./scripts/hook.sh cursor",
+        "timeout": 600,
+        "failClosed": true
+      }
+    ]
+  }
+}

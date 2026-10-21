@@ -15,6 +15,7 @@ check: test
 	test -z "$$(gofmt -l .)"
 	go test -run='^$$' -fuzz=FuzzAnalyze -fuzztime=30s ./internal/effects
 	go test -run='^$$' -fuzz=FuzzHookInput -fuzztime=30s ./cmd/cloudundo
+	go build -o dist/test-cloudundo ./cmd/cloudundo && test/plugin.sh dist/test-cloudundo
 
 # The files a GitHub release needs: one binary per system and checksums.txt,
 # which install.sh checks every download against.

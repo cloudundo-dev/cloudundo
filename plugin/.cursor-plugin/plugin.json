@@ -1,0 +1,22 @@
+{
+  "name": "cloudundo",
+  "version": "0.1.0",
+  "description": "Undo for the AWS data your coding agent deletes. Before a command deletes or overwrites S3, DynamoDB or RDS data, directly or through Terraform, cloudundo makes it recoverable; `cloudundo undo` brings it back.",
+  "author": {
+    "name": "Youssef Khalil"
+  },
+  "homepage": "https://github.com/OWNER/cloudundo",
+  "repository": "https://github.com/OWNER/cloudundo",
+  "license": "Apache-2.0",
+  "keywords": [
+    "aws",
+    "s3",
+    "dynamodb",
+    "rds",
+    "terraform",
+    "backup",
+    "undo",
+    "safety"
+  ],
+  "hooks": "./hooks/cursor.json"
+}

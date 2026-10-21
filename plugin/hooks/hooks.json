@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/hook.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/hook.sh claude-code",
             "timeout": 600,
             "onFailure": "block"
           }

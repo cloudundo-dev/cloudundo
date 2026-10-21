@@ -432,3 +432,25 @@ func TestHookRunsInTheAgentsDirectory(t *testing.T) {
 		t.Fatalf("terraform ran in %q, want %q", got, project)
 	}
 }
+
+// Cursor also runs the Claude Code hooks in ~/.claude/settings.json, but
+// sends them its own tool name ("Shell") and an empty cwd. In Cursor the
+// protection comes from cloudundo's Cursor hook, which gets the real
+// directory, so the Claude Code hook leaves these calls alone instead of
+// protecting the command a second time in the wrong directory.
+func TestClaudeHookLeavesCursorShellCallsToTheCursorHook(t *testing.T) {
+	f := withFake(t)
+	f.CreateBucket("uploads", "us-east-1", "")
+	f.Put("uploads", "a", "A")
+	b, _ := json.Marshal(map[string]any{
+		"hook_event_name": "PreToolUse", "tool_name": "Shell", "cwd": "",
+		"tool_input": map[string]any{"command": "aws s3 rm s3://uploads/a", "cwd": ""},
+	})
+	code, out, errOut := hookRun(t, agentClaude, string(b))
+	if code != 0 || out != "" || errOut != "" {
+		t.Fatalf("exit %d, out %q, err %q; want a silent pass", code, out, errOut)
+	}
+	if f.Versioning("uploads") != "" {
+		t.Fatal("the Claude Code hook changed the bucket; the Cursor hook should do that")
+	}
+}

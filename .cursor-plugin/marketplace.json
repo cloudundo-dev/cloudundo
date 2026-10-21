@@ -1,0 +1,13 @@
+{
+  "name": "cloudundo",
+  "owner": {
+    "name": "Youssef Khalil"
+  },
+  "plugins": [
+    {
+      "name": "cloudundo",
+      "source": "plugin",
+      "description": "Before Cursor deletes or overwrites S3, DynamoDB or RDS data (directly or through Terraform), cloudundo makes it recoverable."
+    }
+  ]
+}
