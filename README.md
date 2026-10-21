@@ -111,10 +111,10 @@ Things to know:
 - **Restored buckets come back private**, with their objects but not their old policy, website, CORS or tags.
 - **A database snapshot can take a while.** cloudundo waits up to 7 minutes; for a bigger database it blocks the delete and asks to run it again later, and the retry uses the same snapshot. Data written between the snapshot and the delete is not in it. Restoring takes minutes too: run the same `undo --yes` again to finish.
 - **Restoring a DynamoDB table takes minutes.** The first `undo --yes` starts it; run the same command again once it is done to put the settings back. Auto scaling, alarms and IAM policies are not restored. On-demand backups are kept until you delete them, and AWS bills for their storage.
-- **A slow or broken network blocks the command instead of hanging.** Each AWS call gets 2 minutes (a bucket copy gets 9), and cloudundo says which call it is waiting for.
+- **A slow or broken network blocks the command instead of hanging.** Each AWS call gets 2 minutes (a bucket copy gets 9), and the whole protection at most 9 minutes, under the agents' 10-minute hook limit. cloudundo says which call it is waiting for.
 - cloudundo calls your own `aws` CLI with the same profile, region and environment as the agent's command, in any AWS region. Inline access keys are used but never written to disk.
 - `cloudundo undo` uses the profile and region the agent used, even from a terminal set up differently. If your current credentials belong to another AWS account, it stops and names both accounts instead of restoring into the wrong one.
-- **Every problem cloudundo can see blocks the command**: bad hook input, an AWS error, a full disk, its own bugs. If the hook program cannot start or times out, Claude Code (v2.1.295+, `onFailure: block`) and Cursor (`failClosed: true`) block too. Codex has no such setting, so there a missing or hung cloudundo lets commands through.
+- **Every problem cloudundo can see blocks the command**: bad hook input, an AWS error, a full disk, its own bugs. If the hook program cannot start or times out, Claude Code (v2.1.295+, `onFailure: block`) and Cursor (`failClosed: true`) block too. Codex has no such setting, so there a missing or crashed cloudundo lets commands through.
 - Undo puts each key back to how it was just before the command, using your computer's clock. If an app writes to the same keys after the command, undo will roll those writes back too, which is why it shows a preview first.
 
 ## What cloudundo does not protect against

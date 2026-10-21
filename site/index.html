@@ -202,7 +202,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
       </li>
       <li>
         <h3>You undo it</h3>
-        <p><code>cloudundo undo 3</code> shows what it would restore. <code>--yes</code> restores it. Undo never deletes anything, so an undo can be undone too.</p>
+        <p><code>cloudundo undo 3</code> shows what it would restore. <code>--yes</code> restores it. Undo never deletes data, so an undo can be undone too.</p>
       </li>
     </ol>
   </section>
@@ -216,7 +216,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
       <table>
         <thead><tr><th>Data</th><th>Before the command</th><th><code>cloudundo undo</code></th></tr></thead>
         <tbody>
-          <tr><td>S3 objects</td><td>Turns on versioning, with old versions kept 7 days</td><td>Brings back deleted objects and earlier versions</td></tr>
+          <tr><td>S3 objects</td><td>Turns on versioning if it is off</td><td>Brings back deleted objects and earlier versions</td></tr>
           <tr><td>S3 buckets</td><td>Copies the bucket (up to 5 GB) to a private backup bucket and checks the copy</td><td>Recreates the bucket and copies the objects back</td></tr>
           <tr><td>DynamoDB</td><td>On-demand backup of a table; saved copies of single items</td><td>Restores the table with its TTL, tags and streams; puts items back</td></tr>
           <tr><td>RDS, Aurora</td><td>Takes a snapshot and waits until it is ready, or uses the final snapshot the command asks for</td><td>Restores the database under the same name, size, network and security groups</td></tr>

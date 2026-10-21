@@ -97,6 +97,14 @@ func (f *Fake) tick() time.Time {
 }
 
 // Now returns the fake clock; the next change happens after it.
+// SetClock moves the fake's clock, for tests that run cloudundo as a
+// separate program, which reads the real time.
+func (f *Fake) SetClock(t time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clock = t
+}
+
 func (f *Fake) Now() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
