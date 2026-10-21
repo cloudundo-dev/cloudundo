@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
 	"github.com/cloudundo/cloudundo/internal/awstest"
@@ -268,4 +270,37 @@ func journalFile(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return filepath.Join(dir, "journal.jsonl")
+}
+
+// slowRunner makes every AWS call take a while, and gives up when the
+// caller's time is up, like the real aws CLI under a context.
+type slowRunner struct {
+	awscli.Runner
+	delay time.Duration
+}
+
+func (s slowRunner) Run(ctx context.Context, env []string, args ...string) ([]byte, error) {
+	select {
+	case <-time.After(s.delay):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return s.Runner.Run(ctx, env, args...)
+}
+
+// Protection that takes longer than the agent allows ends in a block that
+// cloudundo gives itself, before the agent kills it.
+func TestProtectStopsBeforeTheAgentsTimeout(t *testing.T) {
+	f := withFake(t)
+	f.CreateBucket("uploads", "us-east-1", "")
+	f.Put("uploads", "a", "A")
+	newRunner = func() awscli.Runner { return slowRunner{f, 30 * time.Millisecond} }
+	old := protectBudget
+	protectBudget = 50 * time.Millisecond
+	t.Cleanup(func() { protectBudget = old })
+
+	code, out, errOut := runCLI(t, "protect", "--", "aws s3 rb s3://uploads --force")
+	if code != exitBlock || !strings.Contains(out+errOut, "ran out of time") {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
 }

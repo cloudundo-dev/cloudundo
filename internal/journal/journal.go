@@ -116,6 +116,11 @@ func DefaultDir() (string, error) {
 
 // Append assigns the next ID to e and writes it.
 func (j *Journal) Append(e Entry) (Entry, error) {
+	unlock, err := j.lock()
+	if err != nil {
+		return e, err
+	}
+	defer unlock()
 	all, err := j.List()
 	if err != nil {
 		return e, err
@@ -186,6 +191,11 @@ func (j *Journal) Get(id int) (Entry, bool, error) {
 // Update replaces the entry with the same ID. The file is rewritten
 // through a temporary file so a crash never leaves it half written.
 func (j *Journal) Update(e Entry) error {
+	unlock, err := j.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	all, err := j.List()
 	if err != nil {
 		return err

@@ -25,6 +25,11 @@ var (
 	}
 	now    = time.Now
 	getenv = os.Getenv
+	// protectBudget bounds one protect run. It stays under the agents' hook
+	// timeout (hookTimeout, 10 minutes), so cloudundo blocks the command
+	// itself rather than being killed, which some agent versions would
+	// treat as "go ahead".
+	protectBudget = 9 * time.Minute
 )
 
 const exitBlock = 2
@@ -128,7 +133,13 @@ func decide(line, agent string) (o outcome) {
 	}
 	cfg.DataDir = dir
 
-	r := protect.Run(context.Background(), effs, clientFor(newRunner()), cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), protectBudget)
+	defer cancel()
+	r := protect.Run(ctx, effs, clientFor(newRunner()), cfg)
+	if ctx.Err() != nil {
+		r.Allowed = false
+		r.Blocked = append(r.Blocked, fmt.Sprintf("cloudundo ran out of time (%s) before the data was protected. Run the same command again: a snapshot that was started is reused.", protectBudget))
+	}
 	status := "protected"
 	if !r.Allowed {
 		status = "blocked"
