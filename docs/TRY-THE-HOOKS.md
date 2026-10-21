@@ -98,7 +98,7 @@ rm -f <your project>/.cursor/hooks.json                                # Cursor 
 
 (If a `.before-cloudundo` file does not exist, the file did not exist before: delete it instead.)
 
-Unzip the project in Ubuntu, for example to `~/cloudundo-src`. Then run the same three prompts as in Part 1 after each install.
+Put the project's source in Ubuntu at `~/cloudundo-src` (the test kit has it as the `cloudundo-src` folder: `cp -r cloudundo-src ~/`). Then run the same three prompts as in Part 1 after each install.
 
 ### Claude Code plugin
 
