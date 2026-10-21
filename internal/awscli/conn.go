@@ -54,6 +54,24 @@ func ConnFromEnv(env map[string]string) Conn {
 	return c
 }
 
+// FillEnv adds the AWS settings the command inherits from the agent's
+// environment (a profile, a region) that the command line does not set
+// itself, so undo later talks to the same account and region even from a
+// shell set up differently. Credentials are never kept.
+func (c *Conn) FillEnv(getenv func(string) string) {
+	for k := range safeEnv {
+		if _, set := c.Env[k]; set {
+			continue
+		}
+		if v := getenv(k); v != "" {
+			if c.Env == nil {
+				c.Env = map[string]string{}
+			}
+			c.Env[k] = v
+		}
+	}
+}
+
 // HasInlineCredentials reports whether the command carried its own keys.
 func (c Conn) HasInlineCredentials() bool { return len(c.secret) > 0 }
 

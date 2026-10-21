@@ -166,7 +166,7 @@ func TestUndoTableBackupGone(t *testing.T) {
 	w, dir := ddbWorld(t)
 	e := w.protectDDB(dir, "aws dynamodb delete-table --table-name Users")
 	w.f.DropTable("Users")
-	e.Undo[0].BackupArn = "arn:aws:dynamodb:us-east-1:1:table/Users/backup/missing"
+	e.Undo[0].BackupArn = "arn:aws:dynamodb:us-east-1:" + w.f.Account + ":table/Users/backup/missing"
 	p := w.plan(&e, dir)
 	if _, err := p.Apply(context.Background()); err == nil {
 		t.Fatal("restore from a missing backup should fail")

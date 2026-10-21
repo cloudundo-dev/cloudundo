@@ -23,7 +23,8 @@ var (
 	newRunner = func() awscli.Runner {
 		return awscli.Exec{Bin: os.Getenv("CLOUDUNDO_AWS_BIN"), Progress: os.Stderr}
 	}
-	now = time.Now
+	now    = time.Now
+	getenv = os.Getenv
 )
 
 const exitBlock = 2
@@ -109,6 +110,9 @@ func decide(line, agent string) (o outcome) {
 	effs := effects.Analyze(line)
 	if len(effs) == 0 {
 		return outcome{Allowed: true}
+	}
+	for i := range effs {
+		effs[i].Conn.FillEnv(getenv)
 	}
 	cfg, err := config()
 	if err != nil {

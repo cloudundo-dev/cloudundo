@@ -66,8 +66,12 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 	if e.Status == "undone" {
 		p.Notes = append(p.Notes, fmt.Sprintf("#%d was already undone; running it again only restores what changed since.", e.ID))
 	}
+	accounts := map[string]string{}
 	for i := range e.Undo {
 		s := &e.Undo[i]
+		if err := samePlace(ctx, e.ID, s, clientFor, accounts); err != nil {
+			return Plan{}, err
+		}
 		c := clientFor(s.Conn)
 		var err error
 		switch s.Kind {
@@ -276,4 +280,54 @@ func (p Plan) Summary() string {
 		b.WriteString("  note: " + n + "\n")
 	}
 	return b.String()
+}
+
+// samePlace makes undo work on the account and region the data was
+// protected in. A step whose backup has an ARN takes its region from it
+// when the command named none, and undo stops with a clear message when
+// the current credentials belong to another account, instead of failing
+// later with "not found" or restoring into the wrong place.
+func samePlace(ctx context.Context, id int, s *journal.UndoStep, clientFor ClientFor, accounts map[string]string) error {
+	account, region := arnPlace(stepARN(s))
+	if account == "" {
+		return nil
+	}
+	if s.Conn.Region == "" {
+		s.Conn.Region = region
+	}
+	key := s.Conn.Key()
+	current, ok := accounts[key]
+	if !ok {
+		var err error
+		current, err = clientFor(s.Conn).AccountID(ctx)
+		if err != nil {
+			return fmt.Errorf("cannot check which AWS account the current credentials belong to: %w", err)
+		}
+		accounts[key] = current
+	}
+	if current != account {
+		return fmt.Errorf("#%d was protected in AWS account %s, but the current credentials are for account %s. "+
+			"Use the same AWS profile the agent used, then run undo again", id, account, current)
+	}
+	return nil
+}
+
+func stepARN(s *journal.UndoStep) string {
+	switch {
+	case s.BackupArn != "":
+		return s.BackupArn
+	case s.DB != nil:
+		return s.DB.Arn
+	}
+	return ""
+}
+
+// arnPlace returns the account and region of an ARN
+// (arn:partition:service:region:account:resource).
+func arnPlace(arn string) (account, region string) {
+	p := strings.SplitN(arn, ":", 6)
+	if len(p) < 6 || p[0] != "arn" {
+		return "", ""
+	}
+	return p[4], p[3]
 }

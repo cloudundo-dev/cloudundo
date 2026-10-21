@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
 	"github.com/cloudundo/cloudundo/internal/awstest"
+	"github.com/cloudundo/cloudundo/internal/journal"
 )
 
 func withFake(t *testing.T) *awstest.Fake {
@@ -221,4 +222,50 @@ func TestProtectTerraformDestroyThenUndo(t *testing.T) {
 	if _, data, ok := f.DB("courses-db", false); !ok || data != "answers" {
 		t.Fatalf("db = %v %q", ok, data)
 	}
+}
+
+// The agent's profile and region come from its environment, not the
+// command line. They are kept with the entry, so undo from a differently
+// set-up shell still talks to the same account and region; what the
+// command line sets itself wins, and credentials are never kept.
+func TestProtectKeepsTheAgentsProfileAndRegion(t *testing.T) {
+	f := withFake(t)
+	f.CreateBucket("uploads", "us-west-1", "")
+	f.Put("uploads", "a", "A")
+	agentEnv := map[string]string{
+		"AWS_PROFILE": "agent", "AWS_REGION": "us-west-1",
+		"AWS_SECRET_ACCESS_KEY": "do-not-keep", "HOME": "/home/x",
+	}
+	old := getenv
+	getenv = func(k string) string { return agentEnv[k] }
+	t.Cleanup(func() { getenv = old })
+
+	if code, out, errOut := runCLI(t, "protect", "--", "AWS_REGION=eu-west-1 aws s3 rm s3://uploads/a"); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	es := journalEntries(t)
+	if len(es) != 1 || len(es[0].Effects) == 0 {
+		t.Fatalf("entries = %+v", es)
+	}
+	env := es[0].Effects[0].Conn.Env
+	if env["AWS_PROFILE"] != "agent" || env["AWS_REGION"] != "eu-west-1" {
+		t.Fatalf("kept env = %v; want the agent's profile and the command's own region", env)
+	}
+	for _, step := range es[0].Undo {
+		if step.Conn.Env["AWS_PROFILE"] != "agent" {
+			t.Fatalf("undo step conn = %+v; want the agent's profile", step.Conn)
+		}
+	}
+	if b, _ := os.ReadFile(journalFile(t)); strings.Contains(string(b), "do-not-keep") || strings.Contains(string(b), "/home/x") {
+		t.Fatal("the journal kept a credential or an unrelated variable")
+	}
+}
+
+func journalFile(t *testing.T) string {
+	t.Helper()
+	dir, err := journal.DefaultDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(dir, "journal.jsonl")
 }
