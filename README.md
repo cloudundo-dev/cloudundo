@@ -103,6 +103,7 @@ Exit code 0 means the command is safe to run. Exit code 2 means it must not run:
 cloudundo undo 1        # shows what it would restore; changes nothing
 cloudundo undo 1 --yes  # restores it
 cloudundo log           # everything cloudundo saw
+cloudundo cleanup       # the backups it kept (see below)
 ```
 
 **How long can you undo?**
@@ -115,7 +116,15 @@ cloudundo log           # everything cloudundo saw
 | Saved DynamoDB items | until you delete them | on this computer, in `~/.cloudundo` |
 | RDS snapshot | until you delete it | RDS snapshots |
 
-Everything kept in AWS is billed for storage like any backup, and stays until you remove it. `~/.cloudundo` also holds the journal that `undo` reads, so if that folder is lost, the backups in AWS are still there, but you restore them yourself.
+Everything kept in AWS is billed for storage like any backup, and stays until you remove it. `cloudundo cleanup` lists them and deletes the ones you choose:
+
+```sh
+cloudundo cleanup                          # list every backup cloudundo kept; changes nothing
+cloudundo cleanup --older-than 30d --yes   # delete the ones kept longer than 30 days
+cloudundo cleanup 7 --yes                  # or those of entry #7 (--all for every one)
+```
+
+After that, `undo` of those entries says the backup is gone instead of restoring it. The agent hooks block `cleanup --yes`: only you decide which undos to give up. If you applied `cloudundo policy` to your own user, run cleanup with credentials it does not cover. `~/.cloudundo` also holds the journal that `undo` reads, so if that folder is lost, the backups in AWS are still there, but you restore them yourself.
 
 Things to know:
 
@@ -183,6 +192,7 @@ Run those with your own admin credentials. The command also prints how to create
 | `terraform destroy`, `terraform apply [plan]`, `tofu …`, after any `cd` or `-chdir` | read from its plan |
 | `aws cloudformation delete-stack`, `execute-change-set`, `deploy` | read from the stack or its change set |
 | `cdk destroy`, `sam delete`, `pulumi destroy`/`down`, `terragrunt … destroy`, `aws cloudformation update-stack`, `delete-stack-instances` | not readable, blocked |
+| `cloudundo cleanup --yes` | deletes cloudundo's backups, blocked for agents |
 | `update-table` turning off deletion protection, `update-continuous-backups` turning off recovery, `update-time-to-live` turning on TTL, `delete-backup` | weakens protection |
 
 ### Settings
@@ -202,7 +212,8 @@ Run those with your own admin credentials. The command also prints how to create
 4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
 5. ~~RDS snapshots before deletes, ElastiCache snapshot rules, Terraform plans.~~ Done and run on real AWS.
 6. ~~CloudFormation stacks and change sets.~~ Done; real-AWS run next.
-7. `cloudundo cleanup` for old backups; CDK, SAM, Pulumi and Terragrunt plans; backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
+7. ~~`cloudundo cleanup` for old backups.~~ Done.
+8. CDK, SAM, Pulumi and Terragrunt plans; backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
 
 ## Development
 

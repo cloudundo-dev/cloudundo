@@ -30,6 +30,8 @@ Usage:
                                            exit 0: safe to run   exit 2: do not run
   cloudundo undo <id> [--yes]               show what undo would restore; --yes restores it
   cloudundo log [--json]                    list recorded commands
+  cloudundo cleanup [<id>...] [--older-than 30d] [--all] [--yes]
+                                           list the backups cloudundo kept; --yes deletes the chosen ones
   cloudundo check [--json] -- <command>     only show what a command would change
   cloudundo install <agent> [--write]       set up the hook for claude-code, cursor or codex
   cloudundo policy [--account ID] [--region R] [--keep-versions]
@@ -58,6 +60,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdLog(args[1:], stdout, stderr)
 	case "undo":
 		return cmdUndo(args[1:], stdout, stderr)
+	case "cleanup":
+		return cmdCleanup(args[1:], stdout, stderr)
 	case "hook":
 		return cmdHook(args[1:], stdout, stderr)
 	case "install":

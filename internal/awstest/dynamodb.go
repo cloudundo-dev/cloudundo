@@ -215,6 +215,13 @@ func (f *Fake) dynamo(op string, flags map[string]string, args []string) ([]byte
 		}
 		return js(map[string]any{"BackupDetails": map[string]string{"BackupArn": arn, "BackupStatus": status}})
 
+	case "delete-backup":
+		if f.backups[flags["backup-arn"]] == nil {
+			return errOut("An error occurred (BackupNotFoundException)")
+		}
+		delete(f.backups, flags["backup-arn"])
+		return js(map[string]any{"BackupDescription": map[string]any{"BackupDetails": map[string]string{"BackupStatus": "DELETED"}}})
+
 	case "describe-backup":
 		b := f.backups[flags["backup-arn"]]
 		if b == nil {
@@ -326,4 +333,11 @@ func (f *Fake) dynamo(op string, flags map[string]string, args []string) ([]byte
 		return nil, nil
 	}
 	return errOut("fake aws: unsupported dynamodb call " + op)
+}
+
+// HasBackup reports whether a DynamoDB backup exists.
+func (f *Fake) HasBackup(arn string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.backups[arn] != nil
 }

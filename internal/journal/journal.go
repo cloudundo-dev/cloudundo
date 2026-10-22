@@ -69,6 +69,10 @@ type UndoStep struct {
 	// from Snapshot with the settings recorded before the delete.
 	DB       *awscli.DBInfo `json:"db,omitempty"`
 	Snapshot string         `json:"snapshot,omitempty"`
+
+	// Cleaned is when `cloudundo cleanup` deleted this step's backup;
+	// undo can no longer restore it.
+	Cleaned *time.Time `json:"cleaned,omitempty"`
 }
 
 // TableConfig is the part of a DynamoDB table a backup restore leaves out.

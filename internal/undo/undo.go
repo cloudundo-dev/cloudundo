@@ -78,6 +78,11 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 	}
 	for i := range e.Undo {
 		s := &e.Undo[i]
+		if s.Cleaned != nil {
+			p.Notes = append(p.Notes, fmt.Sprintf("The backup of %s was deleted by cloudundo cleanup on %s, so it cannot be restored.",
+				stepTarget(*s), s.Cleaned.Local().Format("2006-01-02")))
+			continue
+		}
 		if err := samePlace(ctx, e.ID, s, clientFor, accounts); err != nil {
 			return Plan{}, err
 		}
@@ -359,4 +364,18 @@ func arnPlace(arn string) (account, region string) {
 		return "", ""
 	}
 	return p[4], p[3]
+}
+
+// stepTarget names what a step restores, for messages.
+func stepTarget(s journal.UndoStep) string {
+	switch s.Kind {
+	case "rds-snapshot":
+		if s.DB != nil {
+			return "database " + s.DB.ID
+		}
+		return "a database"
+	case "ddb-table-backup", "ddb-items":
+		return "DynamoDB table " + s.Table
+	}
+	return "s3://" + s.Bucket
 }

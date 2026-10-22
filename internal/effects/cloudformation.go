@@ -116,8 +116,19 @@ var destroyTools = map[string]struct {
 // launchers run another program: npx cdk destroy, pnpm dlx cdk destroy.
 var launchers = map[string]bool{"npx": true, "pnpm": true, "yarn": true, "bunx": true, "bun": true, "dlx": true, "exec": true, "x": true}
 
-// toolDestroy blocks a destroy through a tool cloudundo cannot read.
+// toolDestroy blocks a destroy through a tool cloudundo cannot read, and
+// an agent deleting cloudundo's own backups.
 func toolDestroy(args []string) []Effect {
+	if len(args) > 1 && filepath.Base(args[0]) == "cloudundo" && args[1] == "cleanup" {
+		for _, a := range args[2:] {
+			if a == "--yes" || a == "-yes" || strings.HasPrefix(a, "--yes=") || strings.HasPrefix(a, "-yes=") {
+				return []Effect{{Kind: UnseenDelete, Service: "cloudundo", Database: "cloudundo",
+					Detail:  "cloudundo cleanup --yes deletes the backups undo needs. Only the user runs it, in their own terminal",
+					Command: strings.Join(args, " ")}}
+			}
+		}
+		return nil
+	}
 	i := 0
 	for i < len(args) && (launchers[filepath.Base(args[i])] || strings.HasPrefix(args[i], "-")) {
 		i++

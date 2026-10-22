@@ -333,3 +333,17 @@ func (c Client) SetBackupRetention(ctx context.Context, d DBInfo, days int) erro
 	_, err := c.call(ctx, "rds", op, flag, d.ID, "--backup-retention-period", strconv.Itoa(days), "--apply-immediately")
 	return err
 }
+
+// DeleteDBSnapshot deletes a manual snapshot; gone is true when it was
+// already deleted.
+func (c Client) DeleteDBSnapshot(ctx context.Context, id string, cluster bool) (gone bool, err error) {
+	args := []string{"rds", "delete-db-snapshot", "--db-snapshot-identifier", id}
+	if cluster {
+		args = []string{"rds", "delete-db-cluster-snapshot", "--db-cluster-snapshot-identifier", id}
+	}
+	_, err = c.call(ctx, args...)
+	if Has(err, "SnapshotNotFound") {
+		return true, nil
+	}
+	return false, err
+}

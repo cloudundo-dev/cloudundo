@@ -378,3 +378,36 @@ func (c Client) Sync(ctx context.Context, src, dst string) error {
 	_, err := c.call(ctx, "s3", "sync", src, dst, "--only-show-errors")
 	return err
 }
+
+// DeleteVersions permanently removes versions and delete markers, up to
+// 1000 per call. Only cleanup uses this, on cloudundo's own backup copies.
+func (c Client) DeleteVersions(ctx context.Context, bucket string, vs []Version) error {
+	for len(vs) > 0 {
+		n := min(len(vs), 1000)
+		type obj struct {
+			Key       string `json:"Key"`
+			VersionId string `json:"VersionId,omitempty"`
+		}
+		req := struct {
+			Objects []obj `json:"Objects"`
+			Quiet   bool  `json:"Quiet"`
+		}{Quiet: true}
+		for _, v := range vs[:n] {
+			req.Objects = append(req.Objects, obj{v.Key, v.VersionID})
+		}
+		body, _ := json.Marshal(req)
+		out, err := c.call(ctx, "s3api", "delete-objects", "--bucket", bucket, "--delete", string(body))
+		if err != nil {
+			return err
+		}
+		var r struct {
+			Errors []struct{ Key, Code, Message string }
+		}
+		if json.Unmarshal(out, &r) == nil && len(r.Errors) > 0 {
+			e := r.Errors[0]
+			return fmt.Errorf("could not delete %d object(s) from s3://%s, first %s: %s %s", len(r.Errors), bucket, e.Key, e.Code, e.Message)
+		}
+		vs = vs[n:]
+	}
+	return nil
+}

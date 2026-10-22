@@ -386,6 +386,31 @@ func (f *Fake) Run(_ context.Context, env []string, args ...string) ([]byte, err
 		}
 		return js(out)
 
+	case "s3api delete-objects":
+		if !needBucket() {
+			return errOut(noBucket)
+		}
+		var req struct {
+			Objects []struct{ Key, VersionId string }
+		}
+		if err := json.Unmarshal([]byte(flags["delete"]), &req); err != nil {
+			return errOut("Invalid JSON: " + err.Error())
+		}
+		for _, o := range req.Objects {
+			vs := b.objects[o.Key]
+			for i, v := range vs {
+				if v.id == o.VersionId {
+					b.objects[o.Key] = append(vs[:i:i], vs[i+1:]...)
+					break
+				}
+			}
+			if len(b.objects[o.Key]) == 0 {
+				delete(b.objects, o.Key)
+			}
+		}
+		f.tick()
+		return js(map[string]any{})
+
 	case "s3api delete-object":
 		if !needBucket() {
 			return errOut(noBucket)
@@ -493,4 +518,19 @@ func splitURI(u string) (string, string) {
 		return rest[:i], rest[i+1:]
 	}
 	return rest, ""
+}
+
+// Count returns how many versions and delete markers are under prefix.
+func (f *Fake) Count(b, prefix string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	if bk := f.buckets[b]; bk != nil {
+		for k, vs := range bk.objects {
+			if strings.HasPrefix(k, prefix) {
+				n += len(vs)
+			}
+		}
+	}
+	return n
 }

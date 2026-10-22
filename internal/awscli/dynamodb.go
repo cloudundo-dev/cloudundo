@@ -220,3 +220,13 @@ func (c Client) EnableDeletionProtection(ctx context.Context, table string) erro
 	_, err := c.call(ctx, "dynamodb", "update-table", "--table-name", table, "--deletion-protection-enabled")
 	return err
 }
+
+// DeleteBackup deletes an on-demand backup; gone is true when it was
+// already deleted.
+func (c Client) DeleteBackup(ctx context.Context, arn string) (gone bool, err error) {
+	_, err = c.call(ctx, "dynamodb", "delete-backup", "--backup-arn", arn)
+	if Has(err, "BackupNotFound") {
+		return true, nil
+	}
+	return false, err
+}

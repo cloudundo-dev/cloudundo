@@ -259,6 +259,18 @@ func (f *Fake) rdsCall(op string, flags map[string]string, args []string) ([]byt
 		}
 		return js(map[string]any{listKey: list})
 
+	case "delete-db-snapshot", "delete-db-cluster-snapshot":
+		idFlag := "db-snapshot-identifier"
+		if op == "delete-db-cluster-snapshot" {
+			idFlag = "db-cluster-snapshot-identifier"
+		}
+		id := flags[idFlag]
+		if f.dbSnaps[id] == nil {
+			return errOut("DBSnapshotNotFound) when calling the operation: " + id + " not found")
+		}
+		delete(f.dbSnaps, id)
+		return js(map[string]any{"DBSnapshot": map[string]string{"Status": "deleted"}})
+
 	case "restore-db-instance-from-db-snapshot", "restore-db-cluster-from-snapshot":
 		cluster := op == "restore-db-cluster-from-snapshot"
 		target, snapID, m := inst, flags["db-snapshot-identifier"], f.dbs
