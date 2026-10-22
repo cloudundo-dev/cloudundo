@@ -140,3 +140,25 @@ func redisCLI(args []string) []Effect {
 var nameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,254}$`)
 
 func validName(s string) bool { return nameRe.MatchString(s) }
+
+// awsBackup handles "aws backup <operation>": deleting AWS Backup recovery
+// points or vaults removes backups someone may need to restore from.
+func awsBackup(p parsed) []Effect {
+	weaken := func(target, detail string) []Effect {
+		if target == "" {
+			target = "?"
+		}
+		return []Effect{{Kind: WeakenProtection, Database: target, Detail: detail}}
+	}
+	switch p.pos[1] {
+	case "delete-recovery-point":
+		return weaken(p.value("recovery-point-arn"), "deletes an AWS Backup recovery point")
+	case "delete-backup-vault":
+		return weaken(p.value("backup-vault-name"), "deletes an AWS Backup vault")
+	case "update-recovery-point-lifecycle":
+		return weaken(p.value("recovery-point-arn"), "changes when an AWS Backup recovery point is deleted")
+	case "delete-backup-plan", "delete-backup-selection":
+		return weaken(p.value("backup-plan-id"), "stops AWS Backup from taking backups")
+	}
+	return nil
+}

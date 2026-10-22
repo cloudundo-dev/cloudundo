@@ -246,6 +246,8 @@ func describe(e effects.Effect) string {
 		}
 	case e.Kind == effects.UnseenDelete:
 		target = e.Command
+	case e.Service == "backup":
+		target = "AWS Backup " + e.Database
 	case e.Stack != nil:
 		target = "stack " + e.Stack.Name
 		switch e.Stack.Op {

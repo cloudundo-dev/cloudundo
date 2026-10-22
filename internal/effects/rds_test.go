@@ -115,3 +115,20 @@ func TestRDSServiceAndConn(t *testing.T) {
 		t.Fatalf("%+v", e)
 	}
 }
+
+func TestAWSBackupDeletesAreBlocked(t *testing.T) {
+	for _, line := range []string{
+		"aws backup delete-recovery-point --backup-vault-name Default --recovery-point-arn arn:aws:rds:eu-west-1:1:snapshot:awsbackup:job-1",
+		"aws backup delete-backup-vault --backup-vault-name Default",
+		"aws backup update-recovery-point-lifecycle --backup-vault-name Default --recovery-point-arn arn:x --lifecycle DeleteAfterDays=1",
+		"aws backup delete-backup-plan --backup-plan-id p-1",
+	} {
+		effs := Analyze(line)
+		if len(effs) != 1 || effs[0].Kind != WeakenProtection {
+			t.Errorf("%q: %+v", line, effs)
+		}
+	}
+	if effs := Analyze("aws backup list-recovery-points-by-backup-vault --backup-vault-name Default"); len(effs) != 0 {
+		t.Errorf("listing is harmless: %+v", effs)
+	}
+}

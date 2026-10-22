@@ -155,7 +155,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
   <div class="hero">
     <div>
       <h1>Your agent can delete anything. <em>You can always get it back.</em></h1>
-      <p class="lede">cloudundo sits in front of the AWS and Terraform commands that Claude Code, Cursor and Codex run. Before a command deletes your S3, DynamoDB or RDS data, it makes that data recoverable. Then one command brings it back.</p>
+      <p class="lede">cloudundo sits in front of the AWS, Terraform and CloudFormation commands that Claude Code, Cursor and Codex run. Before a command deletes your S3, DynamoDB or RDS data, it makes that data recoverable. Then one command brings it back.</p>
       <div class="install">
         <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh</code>
         <button type="button" id="copy-install" aria-label="Copy the install command">Copy</button>
@@ -210,7 +210,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
   <section id="covers">
     <div class="section-head">
       <h2>What it covers</h2>
-      <p>Through the AWS CLI or a <code>terraform apply</code> / <code>destroy</code>, whose plan cloudundo reads first without applying anything.</p>
+      <p>Through the AWS CLI, a <code>terraform apply</code> / <code>destroy</code>, or a CloudFormation stack delete, change set or deploy. cloudundo reads the plan or the stack first, without applying anything.</p>
     </div>
     <div class="table-wrap">
       <table>
@@ -236,7 +236,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
       <li><strong>It is a seatbelt, not a lock.</strong>The agent still holds your AWS keys. <code>cloudundo policy</code> prints an IAM policy that stops those keys from deleting the backups.</li>
       <li><strong>It sees commands, not programs.</strong>A Python script, an SDK call or <code>make destroy</code> that deletes data is not seen.</li>
       <li><strong>Not inside the database.</strong><code>DROP TABLE</code> through <code>psql</code> goes straight to the database. Use RDS point-in-time recovery for that.</li>
-      <li><strong>AWS only, for now.</strong>Supabase, Railway, GCP and Azure are not covered yet.</li>
+      <li><strong>AWS only, for now.</strong>Supabase, Railway, GCP and Azure are not covered yet. <code>cdk destroy</code>, <code>pulumi destroy</code> and Terragrunt are blocked, not protected.</li>
     </ul>
   </section>
 

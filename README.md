@@ -196,6 +196,7 @@ Run those with your own admin credentials. The command also prints how to create
 | `aws cloudformation delete-stack`, `execute-change-set`, `deploy` | read from the stack or its change set |
 | `cdk destroy`, `sam delete`, `pulumi destroy`/`down`, `terragrunt … destroy`, `aws cloudformation update-stack`, `delete-stack-instances` | not readable, blocked |
 | `cloudundo cleanup --yes` | deletes cloudundo's backups, blocked for agents |
+| `aws backup delete-recovery-point`, `delete-backup-vault`, `update-recovery-point-lifecycle`, `delete-backup-plan` | weakens protection (AWS Backup), blocked |
 | `update-table` turning off deletion protection, `update-continuous-backups` turning off recovery, `update-time-to-live` turning on TTL, `delete-backup` | weakens protection |
 
 ### Settings

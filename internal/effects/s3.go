@@ -163,6 +163,9 @@ func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect 
 	case "cloudformation":
 		service = "cloudformation"
 		effs = cloudformation(p, args[1:])
+	case "backup":
+		service = "backup"
+		effs = awsBackup(p)
 	}
 	conn := awscli.ConnFromEnv(env)
 	conn.Profile = p.value("profile")

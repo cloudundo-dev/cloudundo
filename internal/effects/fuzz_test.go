@@ -36,6 +36,7 @@ func FuzzAnalyze(f *testing.F) {
 		"aws cloudformation update-stack --stack-name app",
 		"npx cdk destroy --force",
 		"terragrunt run --all -- destroy",
+		"aws backup delete-recovery-point --backup-vault-name v --recovery-point-arn arn:aws:rds:x",
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -72,6 +73,10 @@ func FuzzAnalyze(f *testing.F) {
 			case "redis":
 				if e.Kind != EraseCacheData {
 					t.Fatalf("redis effect %+v", e)
+				}
+			case "backup":
+				if e.Kind != WeakenProtection {
+					t.Fatalf("backup effect %+v", e)
 				}
 			case "cloudformation":
 				switch e.Kind {

@@ -424,6 +424,9 @@ func target(e effects.Effect) string {
 	if e.Stack != nil {
 		return "CloudFormation stack " + e.Stack.Name
 	}
+	if e.Service == "backup" {
+		return "AWS Backup " + e.Database
+	}
 	switch e.Service {
 	case "rds":
 		if !e.Uncertain && e.Database != "" && e.Database != "?" {
