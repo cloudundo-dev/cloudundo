@@ -67,6 +67,15 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 		p.Notes = append(p.Notes, fmt.Sprintf("#%d was already undone; running it again only restores what changed since.", e.ID))
 	}
 	accounts := map[string]string{}
+	// Buckets this entry copied before deleting them. When such a bucket
+	// is gone, its object versions went with it, and the copy brings the
+	// objects back instead.
+	copied := map[string]bool{}
+	for _, s := range e.Undo {
+		if s.Kind == "s3-bucket-copy" {
+			copied[s.Bucket] = true
+		}
+	}
 	for i := range e.Undo {
 		s := &e.Undo[i]
 		if err := samePlace(ctx, e.ID, s, clientFor, accounts); err != nil {
@@ -77,6 +86,9 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 		switch s.Kind {
 		case "s3-versions":
 			err = planVersions(ctx, c, *s, &p)
+			if err != nil && copied[s.Bucket] && awscli.Has(err, "NoSuchBucket") {
+				err = nil // the bucket copy below restores these objects
+			}
 		case "s3-bucket-copy":
 			err = planBucket(ctx, c, *s, &p)
 		case "ddb-items":

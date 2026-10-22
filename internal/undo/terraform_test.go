@@ -173,3 +173,46 @@ func TestTerraformBlocksDataItCannotBackUp(t *testing.T) {
 		t.Fatalf("r = %+v", r)
 	}
 }
+
+// A destroy that deletes a bucket and an object in it (aws_s3_object):
+// the object is protected twice, by versioning and by the bucket copy.
+// Once the bucket is gone its versions are gone too, so undo must bring
+// the objects back from the copy instead of stopping at the missing
+// bucket. Found on real AWS (Test 7).
+func TestUndoTerraformDestroyOfBucketAndItsObject(t *testing.T) {
+	w := newWorld(t)
+	w.f.CreateBucket("files", "eu-west-1", "")
+	w.f.Put("files", "hello.txt", "hello")
+	plan := `{"format_version": "1.2", "resource_changes": [
+	  {"address": "aws_s3_object.hello", "mode": "managed", "type": "aws_s3_object",
+	   "change": {"actions": ["delete"], "before": {"bucket": "files", "key": "hello.txt",
+	     "arn": "arn:aws:s3:::files/hello.txt", "region": "eu-west-1"}}},
+	  {"address": "aws_s3_bucket.files", "mode": "managed", "type": "aws_s3_bucket",
+	   "change": {"actions": ["delete"], "before": {"bucket": "files", "force_destroy": true,
+	     "arn": "arn:aws:s3:::files", "region": "eu-west-1"}}}
+	]}`
+	e, r := w.protectTF("terraform destroy -auto-approve", cannedPlanner(plan, nil))
+	if !r.Allowed {
+		t.Fatalf("blocked: %v", r.Blocked)
+	}
+	kinds := map[string]bool{}
+	for _, s := range r.Undo {
+		kinds[s.Kind] = true
+	}
+	if !kinds["s3-versions"] || !kinds["s3-bucket-copy"] {
+		t.Fatalf("want both protections, got %+v", r.Undo)
+	}
+
+	w.f.RemoveBucket("files") // terraform destroy: objects, versions and bucket
+
+	p, err := For(context.Background(), e, w.cf, t.TempDir())
+	if err != nil {
+		t.Fatalf("undo plan stopped: %v", err)
+	}
+	if _, err := p.Apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if v, ok := w.f.Get("files", "hello.txt"); !ok || v != "hello" {
+		t.Fatalf("hello.txt = %q, %v", v, ok)
+	}
+}
