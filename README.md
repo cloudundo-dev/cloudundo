@@ -103,6 +103,18 @@ cloudundo undo 1 --yes  # restores it
 cloudundo log           # everything cloudundo saw
 ```
 
+**How long can you undo?**
+
+| What cloudundo kept | Kept for | Where |
+| --- | --- | --- |
+| Old versions of S3 objects | 7 days (`CLOUDUNDO_RETENTION_DAYS`) on buckets cloudundo versioned; as long as your own rules keep them otherwise | in the bucket |
+| Copy of a deleted bucket | until you delete it | `cloudundo-backup-<account>-<region>` bucket |
+| DynamoDB table backup | until you delete it | DynamoDB backups |
+| Saved DynamoDB items | until you delete them | on this computer, in `~/.cloudundo` |
+| RDS snapshot | until you delete it | RDS snapshots |
+
+Everything kept in AWS is billed for storage like any backup, and stays until you remove it. `~/.cloudundo` also holds the journal that `undo` reads, so if that folder is lost, the backups in AWS are still there, but you restore them yourself.
+
 Things to know:
 
 - **Undo never deletes data.** In S3 it only removes delete markers or copies an older version on top. In DynamoDB it saves the current value of an item before putting the old one back, and leaves items the command created. So an undo can be undone too.
