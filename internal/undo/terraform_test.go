@@ -174,11 +174,10 @@ func TestTerraformBlocksDataItCannotBackUp(t *testing.T) {
 	}
 }
 
-// A destroy that deletes a bucket and an object in it (aws_s3_object):
-// the object is protected twice, by versioning and by the bucket copy.
-// Once the bucket is gone its versions are gone too, so undo must bring
-// the objects back from the copy instead of stopping at the missing
-// bucket. Found on real AWS (Test 7).
+// A destroy that deletes a bucket and an object in it (aws_s3_object).
+// Found on real AWS (Test 7): the object was protected twice, by
+// versioning and by the bucket copy, and undo stopped at the missing
+// bucket before reaching the copy.
 func TestUndoTerraformDestroyOfBucketAndItsObject(t *testing.T) {
 	w := newWorld(t)
 	w.f.CreateBucket("files", "eu-west-1", "")
@@ -195,13 +194,18 @@ func TestUndoTerraformDestroyOfBucketAndItsObject(t *testing.T) {
 	if !r.Allowed {
 		t.Fatalf("blocked: %v", r.Blocked)
 	}
-	kinds := map[string]bool{}
-	for _, s := range r.Undo {
-		kinds[s.Kind] = true
+	// The bucket copy covers the object too; versioning would only make
+	// emptying and deleting the bucket fail.
+	if len(r.Undo) != 1 || r.Undo[0].Kind != "s3-bucket-copy" {
+		t.Fatalf("want only the bucket copy, got %+v", r.Undo)
 	}
-	if !kinds["s3-versions"] || !kinds["s3-bucket-copy"] {
-		t.Fatalf("want both protections, got %+v", r.Undo)
+	if w.f.Versioning("files") != "" {
+		t.Fatal("versioning was turned on for a bucket the command deletes")
 	}
+	// Entries recorded by earlier versions protected such objects twice;
+	// undo must still work for them.
+	e.Undo = append([]journal.UndoStep{{Kind: "s3-versions", Bucket: "files", Key: "hello.txt",
+		Since: r.Undo[0].Since, Conn: r.Undo[0].Conn}}, e.Undo...)
 
 	w.f.RemoveBucket("files") // terraform destroy: objects, versions and bucket
 

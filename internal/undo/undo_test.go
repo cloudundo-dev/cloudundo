@@ -275,3 +275,26 @@ func TestUndoWorksWhenRemovingVersionsIsDenied(t *testing.T) {
 	}
 	w.want("b", "x", "X")
 }
+
+// "Empty the bucket, then delete it" is a common agent command. Turning
+// versioning on would make the delete fail (a versioned bucket is never
+// empty), so the bucket is only copied, and undo brings it back from the
+// copy.
+func TestEmptyThenDeleteBucket(t *testing.T) {
+	w := newWorld(t)
+	w.f.CreateBucket("tmp-data", "us-east-1", "")
+	w.f.Put("tmp-data", "a", "A")
+	w.f.Put("tmp-data", "b/c", "C")
+	e := w.protect("aws s3 rm s3://tmp-data --recursive && aws s3 rb s3://tmp-data")
+	if w.f.Versioning("tmp-data") != "" {
+		t.Fatal("versioning turned on: the rb in the same command would fail")
+	}
+	if len(e.Undo) != 1 || e.Undo[0].Kind != "s3-bucket-copy" {
+		t.Fatalf("undo steps: %+v", e.Undo)
+	}
+	w.f.RemoveBucket("tmp-data")
+	w.apply(w.undo(e))
+	if v, ok := w.f.Get("tmp-data", "b/c"); !ok || v != "C" {
+		t.Fatalf("b/c = %q %v", v, ok)
+	}
+}

@@ -95,7 +95,7 @@ Exit code 0 means the command is safe to run. Exit code 2 means it must not run:
 | `aws cloudformation delete-stack`, `execute-change-set` or `deploy` | reads the stack's resources, or the change set (for `deploy`, one made with `--no-execute-changeset` and deleted again; nothing is deployed), then protects every bucket, table, database and cache it deletes or replaces, as above. Resources the template keeps (`DeletionPolicy: Retain`) are skipped | restores each of them as above |
 | `cdk destroy`, `sam delete`, `pulumi destroy`, `terragrunt destroy`, `aws cloudformation update-stack` | blocks it, and says which protected command to use instead | |
 | target something it cannot read (`$VAR`, `xargs`, `file://`) | blocks it | |
-| suspend versioning, change lifecycle rules, or touch the backup bucket | blocks it | |
+| suspend versioning, change lifecycle rules, delete a specific object version (`--version-id`), or touch the backup bucket | blocks it: deleting a version is permanent | |
 | run PartiQL or transactions, turn off deletion protection or point-in-time recovery, turn on TTL, or delete a backup | blocks it | |
 | delete an RDS or cache snapshot or automated backups, turn off RDS deletion protection, set backup retention to 0 | blocks it | |
 
@@ -124,12 +124,15 @@ cloudundo cleanup --older-than 30d --yes   # delete the ones kept longer than 30
 cloudundo cleanup 7 --yes                  # or those of entry #7 (--all for every one)
 ```
 
-After that, `undo` of those entries says the backup is gone instead of restoring it. The agent hooks block `cleanup --yes`: only you decide which undos to give up. If you applied `cloudundo policy` to your own user, run cleanup with credentials it does not cover. `~/.cloudundo` also holds the journal that `undo` reads, so if that folder is lost, the backups in AWS are still there, but you restore them yourself.
+After that, `undo` of those entries says the backup is gone instead of restoring it. The agent hooks block `cleanup --yes`: only you decide which undos to give up. If you applied `cloudundo policy` to your own user, run cleanup with credentials it does not cover.
+
+`~/.cloudundo` also holds the journal that `undo` reads, so if that folder is lost, the backups in AWS are still there, but you restore them yourself.
 
 Things to know:
 
 - **Undo never deletes data.** In S3 it only removes delete markers or copies an older version on top. In DynamoDB it saves the current value of an item before putting the old one back, and leaves items the command created. So an undo can be undone too.
 - **Versioning is permanent.** Once on, it can be suspended but not removed.
+- **A bucket the command also deletes is copied, not versioned.** `aws s3 rm s3://b --recursive && aws s3 rb s3://b` would fail on a versioned bucket (it is never empty), so cloudundo copies the bucket first and leaves versioning alone.
 - **The 7-day expiry rule** is added only to buckets that were never versioned, so old versions you chose to keep are never expired. Existing lifecycle rules are kept as they are.
 - **Restored buckets come back private**, with their objects but not their old policy, website, CORS or tags.
 - **A database snapshot can take a while.** cloudundo waits up to 7 minutes; for a bigger database it blocks the delete and asks to run it again later, and the retry uses the same snapshot. Data written between the snapshot and the delete is not in it. Restoring takes minutes too: run the same `undo --yes` again to finish.

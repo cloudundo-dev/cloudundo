@@ -299,9 +299,17 @@ func lowLevel(p parsed) []Effect {
 
 	switch op {
 	case "delete-object":
+		if p.has("version-id") {
+			return []Effect{{Kind: WeakenProtection, Bucket: bucket, Key: key, Uncertain: bucketUncertain,
+				Detail: "permanently deletes an object version"}}
+		}
 		return []Effect{{Kind: DeleteObjects, Bucket: bucket, Key: key, Uncertain: bucketUncertain || key == "" || looksDynamic(key)}}
 
 	case "delete-objects":
+		if strings.Contains(p.value("delete"), "VersionId") {
+			return []Effect{{Kind: WeakenProtection, Bucket: bucket, Uncertain: bucketUncertain,
+				Detail: "permanently deletes object versions"}}
+		}
 		keys, ok := parseDeleteKeys(p.value("delete"))
 		e := Effect{Kind: DeleteObjects, Bucket: bucket, Keys: keys, Uncertain: bucketUncertain || !ok}
 		if !ok {

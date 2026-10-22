@@ -191,6 +191,95 @@ aws s3 rb s3://$BUCKET --force
 Then in the console: RDS → Snapshots → delete `cloudundo-cu-tf-db-…`; DynamoDB → Backups → delete `cloudundo-cu-tf-users-…`;
 S3 → empty and delete `cloudundo-backup-…`.
 
+## Test 8: an RDS delete through the AWS CLI (about 30 minutes, mostly waiting)
+
+Done on 22 October 2026: protected, deleted, restored with its backup setting.
+
+```sh
+aws rds create-db-instance --db-instance-identifier cu-cli-db --engine postgres --db-instance-class db.t3.micro --allocated-storage 20 --master-username cuadmin --master-user-password "$(openssl rand -hex 12)" --no-publicly-accessible --backup-retention-period 1 --query 'DBInstance.DBInstanceStatus'
+aws rds wait db-instance-available --db-instance-identifier cu-cli-db && echo READY
+./cloudundo protect -- "aws rds delete-db-instance --db-instance-identifier cu-cli-db --skip-final-snapshot"
+aws rds delete-db-instance --db-instance-identifier cu-cli-db --skip-final-snapshot --query 'DBInstance.DBInstanceStatus'
+aws rds wait db-instance-deleted --db-instance-identifier cu-cli-db && echo DELETED
+./cloudundo undo <number> --yes
+aws rds wait db-instance-available --db-instance-identifier cu-cli-db && echo READY
+./cloudundo undo <number> --yes
+aws rds describe-db-instances --db-instance-identifier cu-cli-db --query 'DBInstances[0].[DBInstanceStatus,DBInstanceClass,BackupRetentionPeriod]' --output text
+```
+
+## Test 9: CloudFormation, a deploy that drops a table and a stack delete (about 15 minutes)
+
+A stack with a bucket, a table, and a second table the template keeps (`DeletionPolicy: Retain`).
+No database, so it is quick: databases go through the same protection Tests 7 and 8 checked.
+
+```sh
+mkdir -p ~/cloudundo-test/cfn && cd ~/cloudundo-test/cfn
+cat > v1.json <<'JSON'
+{"Resources": {
+  "Files": {"Type": "AWS::S3::Bucket"},
+  "Users": {"Type": "AWS::DynamoDB::Table", "Properties": {"BillingMode": "PAY_PER_REQUEST",
+    "AttributeDefinitions": [{"AttributeName": "pk", "AttributeType": "S"}],
+    "KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}]}},
+  "Orders": {"Type": "AWS::DynamoDB::Table", "DeletionPolicy": "Retain", "Properties": {"BillingMode": "PAY_PER_REQUEST",
+    "AttributeDefinitions": [{"AttributeName": "pk", "AttributeType": "S"}],
+    "KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}]}}
+}}
+JSON
+python3 -c "import json; t=json.load(open('v1.json')); del t['Resources']['Users']; json.dump(t, open('v2.json','w'))"
+
+../cloudundo protect -- "aws cloudformation deploy --template-file v1.json --stack-name cu-cfn" && aws cloudformation deploy --template-file v1.json --stack-name cu-cfn
+res() { aws cloudformation describe-stack-resource --stack-name cu-cfn --logical-resource-id $1 --query StackResourceDetail.PhysicalResourceId --output text; }
+B=$(res Files); USERS=$(res Users); ORDERS=$(res Orders); echo $B $USERS $ORDERS
+echo hello > a.txt && aws s3 cp a.txt s3://$B/a.txt
+aws dynamodb put-item --table-name $USERS --item '{"pk":{"S":"u1"},"name":{"S":"Ali"}}'
+```
+
+The first `protect` should say the stack does not exist yet, so the deploy only creates resources.
+
+**9a. A deploy that drops the Users table:**
+
+```sh
+../cloudundo protect -- "aws cloudformation deploy --template-file v2.json --stack-name cu-cfn"
+```
+
+Look for: a backup of the Users table, and nothing about the bucket. Then:
+
+```sh
+aws cloudformation list-change-sets --stack-name cu-cfn --query 'length(Summaries)'   # 0: cloudundo removed the change set it made
+aws cloudformation deploy --template-file v2.json --stack-name cu-cfn                  # deletes the Users table
+../cloudundo undo <number> --yes          # starts the table restore
+sleep 120; ../cloudundo undo <number> --yes
+aws dynamodb get-item --table-name $USERS --key '{"pk":{"S":"u1"}}' --query 'Item.name.S' --output text   # Ali
+```
+
+**9b. The agent empties the bucket and deletes the stack:**
+
+```sh
+../cloudundo protect -- "aws s3 rm s3://$B --recursive && aws cloudformation delete-stack --stack-name cu-cfn"
+```
+
+Look for: versioning and a copy of the bucket, and a note that the template keeps `cu-cfn/Orders`. Then:
+
+```sh
+aws s3 rm s3://$B --recursive && aws cloudformation delete-stack --stack-name cu-cfn
+aws cloudformation wait stack-delete-complete --stack-name cu-cfn && echo DELETED
+../cloudundo undo <number> --yes
+aws s3 cp s3://$B/a.txt -                       # hello
+aws dynamodb describe-table --table-name $ORDERS --query 'Table.TableStatus'   # ACTIVE: kept by the template
+```
+
+## Test 10: cleanup, which also cleans up after all the tests
+
+```sh
+cd ~/cloudundo-test
+./cloudundo cleanup                         # lists every backup the tests left; deletes nothing
+./cloudundo protect -- "./cloudundo cleanup --all --yes"; echo "exit $?"   # 2: an agent may not run it
+./cloudundo cleanup --all --yes             # you may
+./cloudundo cleanup                         # No backups to clean up.
+```
+
+Then delete what the tests restored: the Users and Orders tables, and the bucket (`aws s3 rb s3://$B --force`, then empty and delete the versions in the console if it says the bucket is not empty).
+
 ## Clean up (in the AWS console)
 
 - S3: for each `cloudundo-test-…` and `cloudundo-backup-…` bucket: Empty, then Delete.

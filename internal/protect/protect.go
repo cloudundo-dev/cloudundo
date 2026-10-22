@@ -102,6 +102,28 @@ func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Co
 	}
 
 	// 3. Protect, once per bucket and account.
+	//
+	// A bucket the same command also deletes is copied first, and the copy
+	// holds its objects as they were. Turning versioning on there as well
+	// would break the command: "empty it, then delete it" fails on a
+	// versioned bucket, which is never empty.
+	copied := map[string]bool{}
+	emptied := map[string]bool{}
+	for _, e := range all {
+		switch e.Kind {
+		case effects.DeleteBucket:
+			copied[e.Conn.Key()+"|"+e.Bucket] = true
+		case effects.DeleteObjects:
+			emptied[e.Conn.Key()+"|"+e.Bucket] = true
+		}
+	}
+	for i, e := range all {
+		// The command empties the bucket before deleting it, so the delete
+		// will succeed even without --force: copy it.
+		if e.Kind == effects.DeleteBucket && emptied[e.Conn.Key()+"|"+e.Bucket] {
+			all[i].Force = true
+		}
+	}
 	versioned := map[string]bool{}
 	saved := 0
 	for _, e := range all {
@@ -110,6 +132,9 @@ func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Co
 		switch e.Kind {
 		case effects.DeleteObjects, effects.OverwriteObjects:
 			key := e.Conn.Key() + "|" + e.Bucket
+			if copied[key] {
+				continue
+			}
 			if !versioned[key] {
 				versioned[key] = true
 				ok = r.versioning(ctx, c, e.Bucket, cfg)

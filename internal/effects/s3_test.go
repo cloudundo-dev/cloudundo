@@ -2,6 +2,7 @@ package effects
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cloudundo/cloudundo/internal/awscli"
@@ -254,5 +255,22 @@ func TestConnIsKept(t *testing.T) {
 	}
 	if _, ok := c.Env["AWS_SECRET_ACCESS_KEY"]; ok {
 		t.Fatal("secret key kept in the journal-visible env")
+	}
+}
+
+// Deleting a specific version is permanent, versioning or not: no undo
+// can bring it back, so it must never pass as an ordinary delete.
+func TestVersionDeletesArePermanent(t *testing.T) {
+	for _, line := range []string{
+		"aws s3api delete-object --bucket b --key k --version-id 3HL4kqtJlcpXroDTDmJ",
+		`aws s3api delete-objects --bucket b --delete '{"Objects":[{"Key":"k","VersionId":"1"}]}'`,
+	} {
+		effs := Analyze(line)
+		if len(effs) != 1 || effs[0].Kind != WeakenProtection || !strings.Contains(effs[0].Detail, "permanently") {
+			t.Errorf("%q: %+v", line, effs)
+		}
+	}
+	if effs := Analyze(`aws s3api delete-objects --bucket b --delete '{"Objects":[{"Key":"k"}]}'`); len(effs) != 1 || effs[0].Kind != DeleteObjects {
+		t.Errorf("a delete without versions is an ordinary delete: %+v", effs)
 	}
 }
