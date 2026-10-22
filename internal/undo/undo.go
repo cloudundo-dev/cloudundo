@@ -85,7 +85,7 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 		var err error
 		switch s.Kind {
 		case "s3-versions":
-			err = planVersions(ctx, c, *s, &p)
+			err = planVersions(ctx, c, *s, &p, copied[s.Bucket])
 			if err != nil && copied[s.Bucket] && awscli.Has(err, "NoSuchBucket") {
 				err = nil // the bucket copy below restores these objects
 			}
@@ -107,7 +107,8 @@ func For(ctx context.Context, e *journal.Entry, clientFor ClientFor, dataDir str
 	return p, nil
 }
 
-func planVersions(ctx context.Context, c awscli.Client, s journal.UndoStep, p *Plan) error {
+// copied says this entry also copied the bucket before deleting it.
+func planVersions(ctx context.Context, c awscli.Client, s journal.UndoStep, p *Plan, copied bool) error {
 	var vs []awscli.Version
 	switch {
 	case s.Key != "":
@@ -130,6 +131,22 @@ func planVersions(ctx context.Context, c awscli.Client, s journal.UndoStep, p *P
 			return err
 		}
 		vs = all
+	}
+
+	// A bucket that was deleted and then recreated from its copy has no
+	// history from before the command: its versions went with it, and the
+	// copy already put the objects back as they were.
+	if copied {
+		history := false
+		for _, v := range vs {
+			if !v.LastModified.After(s.Since) {
+				history = true
+				break
+			}
+		}
+		if !history {
+			return nil
+		}
 	}
 
 	byKey := map[string][]awscli.Version{}

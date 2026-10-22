@@ -215,4 +215,14 @@ func TestUndoTerraformDestroyOfBucketAndItsObject(t *testing.T) {
 	if v, ok := w.f.Get("files", "hello.txt"); !ok || v != "hello" {
 		t.Fatalf("hello.txt = %q, %v", v, ok)
 	}
+
+	// The second undo run (to finish slow restores) must not call the
+	// restored object new: its history went with the deleted bucket.
+	p, err = For(context.Background(), e, w.cf, t.TempDir())
+	if err != nil {
+		t.Fatalf("second undo plan: %v", err)
+	}
+	if strings.Contains(p.Summary(), "did not exist before") || len(p.Actions) != 0 {
+		t.Fatalf("second run:\n%s", p.Summary())
+	}
 }
