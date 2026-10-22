@@ -50,6 +50,8 @@ type Effect struct {
 	SkipFinalSnapshot bool   `json:"skip_final_snapshot,omitempty"`
 	// TF is set for a terraform apply or destroy (Kind TerraformChange).
 	TF *Terraform `json:"terraform,omitempty"`
+	// Stack is set for a CloudFormation command (Kind StackChange).
+	Stack *Stack `json:"stack,omitempty"`
 	// Via is the command that produced a derived effect (a terraform
 	// resource address), for messages.
 	Via    string `json:"via,omitempty"`
@@ -115,6 +117,10 @@ func Analyze(line string) []Effect {
 			out = append(out, effs...)
 			continue
 		}
+		if effs := toolDestroy(s.Args); effs != nil {
+			out = append(out, effs...)
+			continue
+		}
 		out = append(out, AnalyzeArgs(s.Args, s.Uncertain, s.Env)...)
 	}
 	return out
@@ -154,6 +160,9 @@ func AnalyzeArgs(args []string, uncertain bool, env map[string]string) []Effect 
 	case "elasticache":
 		service = "elasticache"
 		effs = elasticache(p)
+	case "cloudformation":
+		service = "cloudformation"
+		effs = cloudformation(p, args[1:])
 	}
 	conn := awscli.ConnFromEnv(env)
 	conn.Profile = p.value("profile")

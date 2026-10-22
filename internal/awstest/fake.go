@@ -74,6 +74,9 @@ type Fake struct {
 	dbs, clusters map[string]*fdb
 	dbSnaps       map[string]*fsnap
 	caches        map[string]*fcache
+	stacks        map[string]*fstack
+	changeSets    map[string]*fchangeSet
+	deployChanges map[string][]FakeChange
 	// SnapshotPolls is how many describe calls report a new RDS snapshot
 	// as "creating".
 	SnapshotPolls int
@@ -284,6 +287,8 @@ func (f *Fake) Run(_ context.Context, env []string, args ...string) ([]byte, err
 		return f.rdsCall(clean[1], flags, args)
 	case "elasticache":
 		return f.cacheCall(clean[1], flags, args)
+	case "cloudformation":
+		return f.cfnCall(clean[1], flags, args)
 	}
 	name := flags["bucket"]
 	b := f.buckets[name]

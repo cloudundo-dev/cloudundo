@@ -30,6 +30,12 @@ func FuzzAnalyze(f *testing.F) {
 		"redis-cli -h x FLUSHALL",
 		"cd infra && terraform destroy -auto-approve -target=aws_db_instance.main",
 		"terraform -chdir=x apply plan.out",
+		"aws cloudformation delete-stack --stack-name app --retain-resources A B",
+		"aws cloudformation execute-change-set --change-set-name v2 --stack-name app",
+		"aws cloudformation deploy --template-file t.yaml --stack-name app",
+		"aws cloudformation update-stack --stack-name app",
+		"npx cdk destroy --force",
+		"terragrunt run --all -- destroy",
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -67,7 +73,27 @@ func FuzzAnalyze(f *testing.F) {
 				if e.Kind != EraseCacheData {
 					t.Fatalf("redis effect %+v", e)
 				}
+			case "cloudformation":
+				switch e.Kind {
+				case StackChange:
+					if e.Stack == nil {
+						t.Fatalf("stack effect without stack for %q", line)
+					}
+					name := e.Stack.Name
+					if e.Stack.Op == "execute-change-set" {
+						name = e.Stack.ChangeSet
+					}
+					if !stackName.MatchString(name) && !e.Uncertain {
+						t.Fatalf("unknown stack not marked uncertain for %q: %+v", line, e)
+					}
+				case UnseenDelete:
+				default:
+					t.Fatalf("cloudformation effect %+v", e)
+				}
 			default:
+				if e.Kind == UnseenDelete && e.Detail != "" {
+					continue // a destroy through cdk, sam, pulumi or terragrunt: blocked
+				}
 				t.Fatalf("effect without service for %q: %+v", line, e)
 			}
 		}

@@ -205,6 +205,10 @@ func describe(e effects.Effect) string {
 		verb = "ERASE CACHE"
 	case effects.TerraformChange:
 		verb = "TERRAFORM "
+	case effects.StackChange:
+		verb = "CLOUDFORMATION"
+	case effects.UnseenDelete:
+		verb = "DELETE (unseen)"
 	default:
 		verb = string(e.Kind)
 	}
@@ -235,6 +239,18 @@ func describe(e effects.Effect) string {
 		}
 		if e.TF.Dir != "" {
 			target += " in " + e.TF.Dir
+		}
+	case e.Kind == effects.UnseenDelete:
+		target = e.Command
+	case e.Stack != nil:
+		target = "stack " + e.Stack.Name
+		switch e.Stack.Op {
+		case "delete-stack":
+			target = "delete-stack " + e.Stack.Name + " (its resources are read before it runs)"
+		case "execute-change-set":
+			target = "execute-change-set " + e.Stack.ChangeSet + " (its changes are read before it runs)"
+		case "deploy":
+			target = "deploy " + e.Stack.Name + " (its change set is read before it runs)"
 		}
 	case e.Service == "dynamodb":
 		target = "dynamodb:" + e.Table

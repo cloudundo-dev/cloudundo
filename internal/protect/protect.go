@@ -76,14 +76,21 @@ func Run(ctx context.Context, effs []effects.Effect, clientFor ClientFor, cfg Co
 		return r
 	}
 
-	// 2. Read what terraform commands would delete, and check that too.
+	// 2. Read what terraform and CloudFormation commands would delete,
+	// and check that too.
 	var all []effects.Effect
 	for _, e := range effs {
-		if e.Kind != effects.TerraformChange {
+		var derived []effects.Effect
+		ok := true
+		switch e.Kind {
+		case effects.TerraformChange:
+			derived, ok = r.terraformPlan(ctx, e, clientFor, cfg)
+		case effects.StackChange:
+			derived, ok = r.stackPlan(ctx, e, clientFor)
+		default:
 			all = append(all, e)
 			continue
 		}
-		derived, ok := r.terraformPlan(ctx, e, clientFor, cfg)
 		if !ok {
 			return r.fail()
 		}
@@ -157,6 +164,8 @@ func (r *Result) check(effs []effects.Effect) {
 			r.Blocked = append(r.Blocked, fmt.Sprintf(
 				"%q deletes %s, which holds data cloudundo cannot back up yet. Back it up yourself first, or run it yourself.",
 				e.Command, e.Via))
+		case e.Kind == effects.UnseenDelete:
+			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %s.", cmd, e.Detail))
 		case e.Kind == effects.EraseCacheData:
 			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %s. Run it yourself if you mean it.", cmd, e.Detail))
 		case e.Kind == effects.WeakenProtection:
@@ -387,6 +396,9 @@ func (r *Result) bucketCopy(ctx context.Context, c awscli.Client, e effects.Effe
 }
 
 func target(e effects.Effect) string {
+	if e.Stack != nil {
+		return "CloudFormation stack " + e.Stack.Name
+	}
 	switch e.Service {
 	case "rds":
 		if !e.Uncertain && e.Database != "" && e.Database != "?" {
