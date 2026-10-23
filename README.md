@@ -2,6 +2,8 @@
 
 **Your AI agent can delete anything. You can always get it back.**
 
+<!-- Demo GIF: docs/demo.gif (recorded before launch) -->
+
 cloudundo sits in front of the AWS, Terraform and CloudFormation commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3, DynamoDB or RDS, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back. For ElastiCache (Redis, Valkey) it makes sure a snapshot is kept, or stops the delete.
 
 > **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; and a `terraform destroy` of a database, a bucket and a table. CloudFormation is next to be run on real AWS. The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
@@ -18,7 +20,20 @@ you:    cloudundo undo 1 --yes
 
 AI coding agents have deleted real data. In March 2026 Claude Code ran `terraform destroy` on the wrong state and wiped a production database with 2.5 years of records, together with the snapshots meant to be its backup; AWS support restored it about a day later ([Tom's Hardware](https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-code-deletes-developers-production-setup-including-its-database-and-snapshots-2-5-years-of-records-were-nuked-in-an-instant)). That is the case cloudundo is built for: it reads the Terraform plan first, snapshots the database, and refuses commands that delete snapshots.
 
+It is not only production. Staging and dev accounts hold data people need too: a shared staging database, test fixtures that took a week to build, uploaded files. Agents work there all day, often with broad permissions, because it is "only staging".
+
 Most guardrails try to *block* risky commands, which slows agents down until people turn the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be undone.
+
+### How it compares
+
+| | Stops the delete | Gets the data back | The agent keeps working |
+| --- | --- | --- | --- |
+| IAM deny policies | yes, for what you denied | no | no, its calls fail |
+| Backups, point-in-time recovery | no | yes, restored by hand, if they were turned on and not deleted too | yes |
+| The agent's own permission rules and deny lists | yes, for the commands listed | no | no, the command is refused or waits for you |
+| **cloudundo** | only when it cannot make the data recoverable | yes: `cloudundo undo` | yes |
+
+They work together. Keep your backups and IAM policies; cloudundo covers the moment between an agent's mistake and the restore, and its `policy` command adds the IAM rules that keep its own backups safe. What it changes in your account, and what it never does, is in [SECURITY.md](SECURITY.md).
 
 ## Set up
 

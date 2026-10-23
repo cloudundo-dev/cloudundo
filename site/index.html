@@ -221,6 +221,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
           <tr><td>DynamoDB</td><td>On-demand backup of a table; saved copies of single items</td><td>Restores the table with its TTL, tags and streams; puts items back</td></tr>
           <tr><td>RDS, Aurora</td><td>Takes a snapshot and waits until it is ready, or uses the final snapshot the command asks for</td><td>Restores the database under the same name, size, network and security groups</td></tr>
           <tr><td>ElastiCache</td><td>Lets a delete run only if a final snapshot is kept</td><td>Create a new cache from that snapshot</td></tr>
+          <tr><td>Old backups</td><td><code>cloudundo cleanup</code> lists every backup it kept</td><td>You delete the ones you no longer need; agents cannot</td></tr>
           <tr><td>Unclear commands</td><td colspan="2"><span class="blocked">Blocked:</span> a bucket in a <code>$VARIABLE</code>, <code>redis-cli FLUSHALL</code>, deleting backups, turning off versioning</td></tr>
         </tbody>
       </table>
@@ -273,13 +274,13 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
   <section class="why">
     <p class="quote">AI coding agents have wiped production databases, their snapshots and terabytes of S3 data, often in seconds.</p>
     <div>
-      <p>Most guardrails try to block risky commands, which slows agents down until people switch the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be taken back.</p>
-      <p>It is a single program with no dependencies, open source under Apache 2.0, and it calls your own <code>aws</code> CLI with the same account and region as the agent's command.</p>
+      <p>Most guardrails try to block risky commands, which slows agents down until people switch the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be taken back. Not only in production: staging and dev accounts hold data people need too, and agents work there all day.</p>
+      <p>It is a single program with no dependencies and no telemetry, open source under Apache 2.0, and it calls your own <code>aws</code> CLI with the same account and region as the agent's command. <a href="https://github.com/OWNER/cloudundo/blob/main/SECURITY.md">Everything it changes in your account</a> is listed.</p>
     </div>
   </section>
 
   <footer>
-    <span>cloudundo · Apache 2.0</span>
+    <span>cloudundo · Apache 2.0 · <a href="https://github.com/OWNER/cloudundo/blob/main/SECURITY.md">Security</a></span>
     <a href="https://github.com/OWNER/cloudundo">github.com/OWNER/cloudundo</a>
   </footer>
 </div>
