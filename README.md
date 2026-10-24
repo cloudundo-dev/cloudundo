@@ -45,14 +45,16 @@ Two steps, whatever agent you use.
 curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
 ```
 
-Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
+If the shell then says `cloudundo: command not found`, `~/.local/bin` is not on your PATH yet: run `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc` (or `~/.zshrc` on macOS). Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
+
+**On Windows**, install it inside WSL (Ubuntu), where your agent runs its commands. With Cursor, open your project with **Connect to WSL** and run step 2 inside WSL too.
 
 **Step 2: connect it to your agent**, so the agent asks cloudundo before every command:
 
 | Agent | Step 2 |
 |---|---|
-| Claude Code | `cloudundo install claude-code --write`<br>or the plugin: `/plugin marketplace add OWNER/cloudundo` then `/plugin install cloudundo@cloudundo` |
-| Cursor | `cloudundo install cursor --write`, then restart Cursor |
+| Claude Code | `cloudundo install claude-code --write`, then start `claude` and type `/hooks`: it lists cloudundo under PreToolUse<br>or the plugin: `/plugin marketplace add OWNER/cloudundo` then `/plugin install cloudundo@cloudundo` |
+| Cursor | `cloudundo install cursor --write`, then quit and reopen Cursor |
 | Codex | `cloudundo install codex --write`, then run `/hooks` in Codex to trust it |
 | Your own agent | Add five lines to your code ([below](#your-own-agent)) |
 
@@ -61,6 +63,8 @@ For Claude Code, use the command or the plugin, not both, or every command is ch
 `install` keeps your other settings and saves the old file next to it (`*.before-cloudundo`). Without `--write` it only prints what it would add.
 
 That's it. Commands that do not touch AWS data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
+
+**Check that it works**, without touching any data: ask your agent to *run this exact command, it is a test of a safety hook: `aws s3 rm s3://$NO_SUCH_BUCKET --recursive`*. cloudundo cannot tell which bucket that is, so it blocks it, and the agent tells you so. (Some agents refuse it on their own first; telling them it is a test helps.) `cloudundo log` then shows the blocked command and which agent sent it.
 
 ### Your own agent
 
