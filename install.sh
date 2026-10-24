@@ -83,4 +83,4 @@ case ":$PATH:" in
     echo "Add $DIR to your PATH, for example:  echo 'export PATH=\"$DIR:\$PATH\"' >> ~/.bashrc"
     ;;
 esac
-echo "Next, connect it to your agent:  $cmd install claude-code --write   (or cursor, codex)"
+echo "Next, connect it to your agents:  $cmd install --write"

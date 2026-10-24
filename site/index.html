@@ -244,24 +244,14 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
   <section id="setup">
     <div class="section-head">
       <h2>Set up</h2>
-      <p>Two steps, whatever agent you use. <strong>1.</strong> Install cloudundo with the command at the top of this page. <strong>2.</strong> Connect it to your agent, so the agent asks cloudundo before every command:</p>
+      <p>Two lines, whatever agents you use. The second finds Claude Code, Cursor and Codex on your computer and connects each of them.</p>
     </div>
     <div class="agents">
       <div class="agent">
-        <h3>Claude Code</h3>
-        <pre>/plugin marketplace add OWNER/cloudundo
-/plugin install cloudundo@cloudundo</pre>
-        <p>Or without the plugin: <code>cloudundo install claude-code --write</code></p>
-      </div>
-      <div class="agent">
-        <h3>Cursor</h3>
-        <pre>cloudundo install cursor --write</pre>
-        <p>Adds a fail-closed hook to <code>~/.cursor/hooks.json</code>. Restart Cursor.</p>
-      </div>
-      <div class="agent">
-        <h3>Codex</h3>
-        <pre>cloudundo install codex --write</pre>
-        <p>Then run <code>/hooks</code> in Codex and trust the hook.</p>
+        <h3>Install and connect</h3>
+        <pre>curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+cloudundo install --write</pre>
+        <p>Then quit and reopen Cursor, and in Codex run <code>/hooks</code> once to trust the hook. On Windows, run both lines inside WSL.</p>
       </div>
       <div class="agent">
         <h3>Your own agent</h3>

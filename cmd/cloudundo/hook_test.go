@@ -503,3 +503,56 @@ func TestHookBlocksWhenNoInputArrives(t *testing.T) {
 		t.Fatalf("exit %d %s", code, errOut)
 	}
 }
+
+func noAgentsOnPath(t *testing.T, on ...string) {
+	t.Helper()
+	old := lookPath
+	lookPath = func(name string) (string, error) {
+		for _, o := range on {
+			if o == name {
+				return "/usr/bin/" + name, nil
+			}
+		}
+		return "", errors.New("not found")
+	}
+	t.Cleanup(func() { lookPath = old })
+}
+
+// One command sets up every agent on the computer.
+func TestInstallFindsEveryAgent(t *testing.T) {
+	home := withInstallHome(t)
+	noAgentsOnPath(t, "codex")
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o700)
+	os.MkdirAll(filepath.Join(home, ".cursor-server"), 0o700) // Cursor connected to WSL
+
+	code, out, _ := runCLI(t, "install")
+	if code != 0 || !strings.Contains(out, "Claude Code") || !strings.Contains(out, "Cursor") || !strings.Contains(out, "Codex") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); err == nil {
+		t.Fatal("wrote without --write")
+	}
+
+	code, out, errOut := runCLI(t, "install", "--write")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	for _, f := range []string{".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json"} {
+		b, err := os.ReadFile(filepath.Join(home, f))
+		if err != nil || !strings.Contains(string(b), "cloudundo") {
+			t.Fatalf("%s: %v %s", f, err, b)
+		}
+	}
+	// Running it again changes nothing.
+	if code, out, _ := runCLI(t, "install", "--write"); code != 0 || strings.Count(out, "already in") != 3 {
+		t.Fatalf("second run: %d\n%s", code, out)
+	}
+}
+
+func TestInstallWithNoAgentSaysSo(t *testing.T) {
+	withInstallHome(t)
+	noAgentsOnPath(t)
+	if code, _, errOut := runCLI(t, "install", "--write"); code != 2 || !strings.Contains(errOut, "found no Claude Code, Cursor or Codex") {
+		t.Fatalf("exit %d %s", code, errOut)
+	}
+}

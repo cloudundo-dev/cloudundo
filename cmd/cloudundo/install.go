@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -32,6 +33,7 @@ var (
 const hookTimeout = 600
 
 // cmdInstall prints, or with --write adds, the hook settings for an agent.
+// With no agent named, it sets up every agent it finds on this computer.
 func cmdInstall(args []string, stdout, stderr io.Writer) int {
 	fset := flag.NewFlagSet("install", flag.ContinueOnError)
 	fset.SetOutput(stderr)
@@ -46,7 +48,7 @@ func cmdInstall(args []string, stdout, stderr io.Writer) int {
 	if agent == "" && fset.NArg() == 1 {
 		agent = fset.Arg(0)
 	} else if fset.NArg() > 0 {
-		fmt.Fprintln(stderr, "usage: cloudundo install claude-code|cursor|codex [--write]")
+		fmt.Fprintln(stderr, installUsage)
 		return 2
 	}
 
@@ -60,34 +62,111 @@ func cmdInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "cloudundo install: cannot find the cloudundo program:", err)
 		return 1
 	}
+	if agent != "" {
+		return installOne(agent, *write, home, exe, stdout, stderr)
+	}
+
+	found := detectAgents(home)
+	if len(found) == 0 {
+		fmt.Fprintln(stderr, "cloudundo install: found no Claude Code, Cursor or Codex on this computer.")
+		fmt.Fprintln(stderr, installUsage)
+		return 2
+	}
+	if !*write {
+		fmt.Fprintln(stdout, "Found:")
+		for _, a := range found {
+			fmt.Fprintf(stdout, "  %-12s hook goes in %s\n", agentNames[a], settingsFile(home, a))
+		}
+		fmt.Fprintln(stdout, "\nRun `cloudundo install --write` to add the hook to all of them (each old file is kept as *.before-cloudundo),")
+		fmt.Fprintln(stdout, "or `cloudundo install <agent>` to see one agent's settings first.")
+		return 0
+	}
+	code := 0
+	for i, a := range found {
+		if i > 0 {
+			fmt.Fprintln(stdout)
+		}
+		fmt.Fprintf(stdout, "%s:\n", agentNames[a])
+		if c := installOne(a, true, home, exe, stdout, stderr); c != 0 {
+			code = c
+		}
+	}
+	return code
+}
+
+const installUsage = "usage: cloudundo install [claude-code|cursor|codex] [--write]"
+
+var agentNames = map[string]string{agentClaude: "Claude Code", agentCursor: "Cursor", agentCodex: "Codex"}
+
+// lookPath finds a program; swapped in tests.
+var lookPath = exec.LookPath
+
+// detectAgents lists the agents that look installed: their settings
+// folder exists (Cursor's server folder too, for Cursor connected to
+// WSL or SSH) or their program is on PATH.
+func detectAgents(home string) []string {
+	has := func(paths ...string) bool {
+		for _, p := range paths {
+			if st, err := os.Stat(filepath.Join(home, p)); err == nil && st.IsDir() {
+				return true
+			}
+		}
+		return false
+	}
+	onPath := func(name string) bool {
+		_, err := lookPath(name)
+		return err == nil
+	}
+	var out []string
+	if has(".claude") || onPath("claude") {
+		out = append(out, agentClaude)
+	}
+	if has(".cursor", ".cursor-server") || onPath("cursor") {
+		out = append(out, agentCursor)
+	}
+	if has(".codex") || onPath("codex") {
+		out = append(out, agentCodex)
+	}
+	return out
+}
+
+func settingsFile(home, agent string) string {
+	switch agent {
+	case agentClaude:
+		return filepath.Join(home, ".claude", "settings.json")
+	case agentCursor:
+		return filepath.Join(home, ".cursor", "hooks.json")
+	}
+	return filepath.Join(home, ".codex", "hooks.json")
+}
+
+// installOne prints, or with write adds, one agent's hook.
+func installOne(agent string, write bool, home, exe string, stdout, stderr io.Writer) int {
 	command := quoteExe(exe) + " hook " + agent
 
-	var file string
 	var event string
 	var entry map[string]any
 	switch agent {
 	case agentClaude:
-		file = filepath.Join(home, ".claude", "settings.json")
 		event = "PreToolUse"
 		entry = map[string]any{"matcher": "Bash", "hooks": []any{map[string]any{
 			"type": "command", "command": command, "timeout": hookTimeout, "onFailure": "block",
 		}}}
 	case agentCursor:
-		file = filepath.Join(home, ".cursor", "hooks.json")
 		event = "beforeShellExecution"
 		entry = map[string]any{"command": command, "timeout": hookTimeout, "failClosed": true}
 	case agentCodex:
-		file = filepath.Join(home, ".codex", "hooks.json")
 		event = "PreToolUse"
 		entry = map[string]any{"matcher": "^Bash$", "hooks": []any{map[string]any{
 			"type": "command", "command": command, "timeout": hookTimeout,
 		}}}
 	default:
-		fmt.Fprintln(stderr, "usage: cloudundo install claude-code|cursor|codex [--write]")
+		fmt.Fprintln(stderr, installUsage)
 		return 2
 	}
+	file := settingsFile(home, agent)
 
-	if !*write {
+	if !write {
 		snippet := map[string]any{"hooks": map[string]any{event: []any{entry}}}
 		if agent == agentCursor {
 			snippet["version"] = 1
@@ -120,7 +199,7 @@ func printAfter(w io.Writer, agent string) {
 	case agentClaude:
 		fmt.Fprintln(w, `"onFailure": "block" needs Claude Code v2.1.295 or later; it makes a hook that crashes or times out block the command.`)
 	case agentCursor:
-		fmt.Fprintln(w, "Restart Cursor so it loads the hook.")
+		fmt.Fprintln(w, "Quit and reopen Cursor so it loads the hook.")
 	case agentCodex:
 		fmt.Fprintln(w, "Run /hooks in Codex to review and trust the hook; Codex does not run it until you do.")
 		fmt.Fprintln(w, "Codex lets a command through if the hook itself crashes or times out; cloudundo blocks on every error it can see.")

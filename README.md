@@ -37,32 +37,28 @@ They work together. Keep your backups and IAM policies; cloudundo covers the mom
 
 ## Set up
 
-Two steps, whatever agent you use.
-
-**Step 1: install cloudundo** on the machine where your agent runs commands (Linux, macOS, or WSL on Windows). The script checks the download's SHA-256 before installing it to `~/.local/bin`:
-
 ```sh
 curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+cloudundo install --write
 ```
 
-If the shell then says `cloudundo: command not found`, `~/.local/bin` is not on your PATH yet: run `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc` (or `~/.zshrc` on macOS). Or download a binary from the releases page, or build it: `go build ./cmd/cloudundo`.
+The first line installs cloudundo (it checks the download's SHA-256 first). The second finds Claude Code, Cursor and Codex on your computer and connects each of them, keeping your other settings. Then:
 
-**On Windows**, install it inside WSL (Ubuntu), where your agent runs its commands. With Cursor, open your project with **Connect to WSL** and run step 2 inside WSL too.
+- **Cursor:** quit and reopen it.
+- **Codex:** run `/hooks` once and trust the hook.
 
-**Step 2: connect it to your agent**, so the agent asks cloudundo before every command:
+That's it. Commands that do not touch AWS data pass straight through, and your agent's own permission prompts stay as they are.
 
-| Agent | Step 2 |
-|---|---|
-| Claude Code | `cloudundo install claude-code --write`, then start `claude` and type `/hooks`: it lists cloudundo under PreToolUse<br>or the plugin: `/plugin marketplace add OWNER/cloudundo` then `/plugin install cloudundo@cloudundo` |
-| Cursor | `cloudundo install cursor --write`, then quit and reopen Cursor |
-| Codex | `cloudundo install codex --write`, then run `/hooks` in Codex to trust it |
-| Your own agent | Add five lines to your code ([below](#your-own-agent)) |
+<details>
+<summary><b>Windows, PATH problems, one agent at a time, the Claude Code plugin</b></summary>
 
-For Claude Code, use the command or the plugin, not both, or every command is checked twice.
+- **Windows:** install and run it inside WSL (Ubuntu), where your agent runs its commands. With Cursor, open your project with **Connect to WSL**.
+- **`cloudundo: command not found`:** `~/.local/bin` is not on your PATH yet. Run `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc` (or `~/.zshrc` on macOS).
+- **One agent at a time:** `cloudundo install claude-code --write` (or `cursor`, `codex`). Without `--write`, `install` only shows what it would add. Each changed file is saved next to itself as `*.before-cloudundo`.
+- **Claude Code plugin**, instead of `install`: `/plugin marketplace add OWNER/cloudundo`, then `/plugin install cloudundo@cloudundo`. Use one or the other, not both, or every command is checked twice.
+- **No install script:** download a binary from the releases page, or build it with `go build ./cmd/cloudundo`.
 
-`install` keeps your other settings and saves the old file next to it (`*.before-cloudundo`). Without `--write` it only prints what it would add.
-
-That's it. Commands that do not touch AWS data pass straight through. The hook never approves a command for you; your agent's own permission settings still apply.
+</details>
 
 **Check that it works**, without touching any data: ask your agent to *run this exact command, it is a test of a safety hook: `aws s3 rm s3://$NO_SUCH_BUCKET --recursive`*. cloudundo cannot tell which bucket that is, so it blocks it, and the agent tells you so. (Some agents refuse it on their own first; telling them it is a test helps.) `cloudundo log` then shows the blocked command and which agent sent it.
 
