@@ -37,17 +37,37 @@ They work together. Keep your backups and IAM policies; cloudundo covers the mom
 
 ## Set up
 
+About two minutes, on the computer where your agent runs its commands (Linux, macOS, or WSL on Windows).
+
+**1. Install cloudundo**
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+```
+
+This downloads the cloudundo program for your computer, checks that the download is the real one (SHA-256), and puts it in `~/.local/bin`.
+
+**2. Connect it to your agents**
+
+```sh
 cloudundo install --write
 ```
 
-The first line installs cloudundo (it checks the download's SHA-256 first). The second finds Claude Code, Cursor and Codex on your computer and connects each of them, keeping your other settings. Then:
+This finds Claude Code, Cursor and Codex on your computer and tells each of them to ask cloudundo before it runs a command. Your other settings stay as they are, and the old settings file is saved next to the new one (`*.before-cloudundo`). Run `cloudundo install` without `--write` first if you want to see what it would change.
 
-- **Cursor:** quit and reopen it.
-- **Codex:** run `/hooks` once and trust the hook.
+**3. Restart your agent**
 
-That's it. Commands that do not touch AWS data pass straight through, and your agent's own permission prompts stay as they are.
+- **Claude Code:** start a new session. Type `/hooks` to see cloudundo listed.
+- **Cursor:** quit it and open it again.
+- **Codex:** run `/hooks` once and trust the cloudundo hook.
+
+**4. Check that it works**, without touching any data. Ask your agent:
+
+> Run this exact command, it is a test of a safety hook: `aws s3 rm s3://$NO_SUCH_BUCKET --recursive`
+
+cloudundo cannot tell which bucket that is, so it blocks the command, and the agent tells you so. (Some agents refuse it on their own first; telling them it is a test helps.) Then run `cloudundo log` to see the blocked command and which agent sent it.
+
+From now on, commands that do not touch AWS data run as usual, and your agent's own permission prompts stay as they are. When a command would delete data, cloudundo makes it recoverable first. `cloudundo log` lists each command with its number, and `cloudundo undo <number>` brings the data back (Claude Code also shows that command in the chat).
 
 <details>
 <summary><b>Windows, PATH problems, one agent at a time, the Claude Code plugin</b></summary>
@@ -59,8 +79,6 @@ That's it. Commands that do not touch AWS data pass straight through, and your a
 - **No install script:** download a binary from the releases page, or build it with `go build ./cmd/cloudundo`.
 
 </details>
-
-**Check that it works**, without touching any data: ask your agent to *run this exact command, it is a test of a safety hook: `aws s3 rm s3://$NO_SUCH_BUCKET --recursive`*. cloudundo cannot tell which bucket that is, so it blocks it, and the agent tells you so. (Some agents refuse it on their own first; telling them it is a test helps.) `cloudundo log` then shows the blocked command and which agent sent it.
 
 ### Your own agent
 
