@@ -6,7 +6,7 @@
 
 cloudundo sits in front of the AWS, Terraform and CloudFormation commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3, DynamoDB or RDS, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back. For ElastiCache (Redis, Valkey) it makes sure a snapshot is kept, or stops the delete.
 
-> **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; a `terraform destroy` of a database, a bucket and a table; a CloudFormation deploy that drops a table and a stack delete; and `cleanup`. The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
+> **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; a `terraform destroy` of a database, a bucket and a table; a CloudFormation deploy that drops a table and a stack delete; and `cleanup`. The hooks were tried inside Claude Code and Cursor (on Windows, connected to WSL): commands pass, deletes are protected, unclear commands are blocked, and undo works. The Codex hook follows Codex's documentation and has not been tried inside Codex yet ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
 
 ```text
 you:    "clean up the old test data"
@@ -227,7 +227,7 @@ Run those with your own admin credentials. The command also prints how to create
 
 1. ~~S3: versioning before object deletes, bucket copies before bucket deletes, `undo`.~~ Done.
 2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
-3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; being tried inside each agent.
+3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; tried inside Claude Code and Cursor.
 4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
 5. ~~RDS snapshots before deletes, ElastiCache snapshot rules, Terraform plans.~~ Done and run on real AWS.
 6. ~~CloudFormation stacks and change sets.~~ Done and run on real AWS.

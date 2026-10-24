@@ -31,6 +31,8 @@ aws s3 cp s3://$B/a.txt -     # hello
 
 ## Claude Code
 
+Done on 24 October 2026 with Claude Code 2.1.310: all three prompts behaved as below, and `undo` brought the file back.
+
 ```sh
 claude --version                          # note the version
 cloudundo install claude-code             # read what it will add
@@ -58,6 +60,8 @@ Start `codex`, type `/hooks`, and **trust** the cloudundo hook (Codex does not r
 - ✅ Prompt 3 is refused with cloudundo's reason.
 
 ## Cursor (Windows, working inside WSL)
+
+Done on 24 October 2026 with the project hook below (Cursor 3.24): all three prompts behaved as below, and `undo` brought the file back. Cursor retried the delete once outside its sandbox, so it shows twice in `cloudundo log`, both protected. A first try hung until the hook stopped waiting for Cursor to close its input (fixed in 0.4.0-rc2).
 
 Open Cursor, then **Connect to WSL** (bottom-left corner, or the command palette: "WSL: Connect to WSL"), and open a folder inside Ubuntu, so the agent's commands run in Ubuntu where cloudundo and `aws` are installed.
 
