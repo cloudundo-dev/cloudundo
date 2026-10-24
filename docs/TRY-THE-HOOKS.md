@@ -62,6 +62,7 @@ Start `codex`, type `/hooks`, and **trust** the cloudundo hook (Codex does not r
 ## Cursor (Windows, working inside WSL)
 
 Done on 24 October 2026 with the project hook below (Cursor 3.24): all three prompts behaved as below, and `undo` brought the file back. Cursor retried the delete once outside its sandbox, so it shows twice in `cloudundo log`, both protected. A first try hung until the hook stopped waiting for Cursor to close its input (fixed in 0.4.0-rc2).
+`cloudundo install cursor --write` run inside Ubuntu (user-level `~/.cursor/hooks.json` there) works the same way with Cursor connected to WSL.
 
 Open Cursor, then **Connect to WSL** (bottom-left corner, or the command palette: "WSL: Connect to WSL"), and open a folder inside Ubuntu, so the agent's commands run in Ubuntu where cloudundo and `aws` are installed.
 
