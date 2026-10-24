@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 // stdin is swapped in tests.
@@ -56,12 +58,9 @@ func cmdHook(args []string, stdout, stderr io.Writer) (code int) {
 		return exitBlock
 	}
 
-	body, err := io.ReadAll(io.LimitReader(stdin, maxHookInput+1))
+	body, err := readHookInput(stdin)
 	if err != nil {
-		return block("cloudundo: blocked: could not read the hook input: " + err.Error())
-	}
-	if len(body) > maxHookInput {
-		return block("cloudundo: blocked: the hook input is too large to check")
+		return block("cloudundo: blocked: " + err.Error())
 	}
 	line, isShell, err := hookCommand(agent, body)
 	if err != nil {
@@ -206,4 +205,63 @@ func hookCwd(body []byte) string {
 	}
 	_ = json.Unmarshal(body, &in)
 	return in.Cwd
+}
+
+// hookReadTimeout bounds the wait for the agent's input, so a hook that
+// gets none blocks quickly instead of holding the agent until its timeout.
+var hookReadTimeout = 30 * time.Second
+
+// countingReader counts what has been read through it.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// readHookInput reads the agent's JSON. It stops at the end of the first
+// JSON value rather than waiting for the agent to close stdin, which some
+// agents do late or not at all.
+func readHookInput(r io.Reader) ([]byte, error) {
+	type result struct {
+		body []byte
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		// A panic here would not reach cmdHook's recover; turn it into an
+		// error so the command is still blocked with a message.
+		defer func() {
+			if p := recover(); p != nil {
+				done <- result{nil, fmt.Errorf("internal error reading the hook input: %v", p)}
+			}
+		}()
+		cr := &countingReader{r: io.LimitReader(r, maxHookInput+1)}
+		var raw json.RawMessage
+		err := json.NewDecoder(cr).Decode(&raw)
+		switch {
+		case cr.n > maxHookInput:
+			done <- result{nil, errors.New("the hook input is too large to check")}
+		case err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF):
+			if _, isSyntax := err.(*json.SyntaxError); isSyntax {
+				done <- result{[]byte("not json"), nil} // reported as "not a JSON object" below
+				return
+			}
+			done <- result{nil, fmt.Errorf("could not read the hook input: %w", err)}
+		case err != nil:
+			done <- result{[]byte("not json"), nil}
+		default:
+			done <- result{raw, nil}
+		}
+	}()
+	select {
+	case res := <-done:
+		return res.body, res.err
+	case <-time.After(hookReadTimeout):
+		return nil, fmt.Errorf("the agent sent no hook input within %s", hookReadTimeout)
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudundo/cloudundo/internal/journal"
 )
@@ -462,5 +463,43 @@ func TestLogNamesTheAgent(t *testing.T) {
 	hookRun(t, agentClaude, claudeInput("aws s3 rm s3://b/k"))
 	if _, out, _ := runCLI(t, "log"); !strings.Contains(out, "aws s3 rm s3://b/k  (claude-code)") {
 		t.Fatalf("log does not name the agent:\n%s", out)
+	}
+}
+
+// Some agents write the JSON and keep stdin open. The hook must answer
+// after the first JSON value instead of waiting for the agent to close it.
+func TestHookAnswersWithoutWaitingForStdinToClose(t *testing.T) {
+	withFake(t)
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+	go pw.Write([]byte(cursorInput("ls")))
+	old := stdin
+	stdin = pr
+	t.Cleanup(func() { stdin = old })
+
+	done := make(chan int, 1)
+	go func() {
+		code, _, _ := runCLI(t, "hook", agentCursor)
+		done <- code
+	}()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("exit %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hook waited for stdin to close")
+	}
+}
+
+func TestHookBlocksWhenNoInputArrives(t *testing.T) {
+	withFake(t)
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+	old, oldWait := stdin, hookReadTimeout
+	stdin, hookReadTimeout = pr, 100*time.Millisecond
+	t.Cleanup(func() { stdin, hookReadTimeout = old, oldWait })
+	if code, _, errOut := runCLI(t, "hook", agentCursor); code != exitBlock || !strings.Contains(errOut, "no hook input") {
+		t.Fatalf("exit %d %s", code, errOut)
 	}
 }
