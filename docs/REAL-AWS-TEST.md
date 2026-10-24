@@ -209,6 +209,8 @@ aws rds describe-db-instances --db-instance-identifier cu-cli-db --query 'DBInst
 
 ## Test 9: CloudFormation, a deploy that drops a table and a stack delete (about 15 minutes)
 
+Done on 24 October 2026: the deploy's change set was read and deleted again, the table was backed up and restored, the stack delete's bucket was copied and restored, and the retained table was left alone.
+
 A stack with a bucket, a table, and a second table the template keeps (`DeletionPolicy: Retain`).
 No database, so it is quick: databases go through the same protection Tests 7 and 8 checked.
 
@@ -269,6 +271,8 @@ aws dynamodb describe-table --table-name $ORDERS --query 'Table.TableStatus'   #
 ```
 
 ## Test 10: cleanup, which also cleans up after all the tests
+
+Done on 24 October 2026: nine backups listed, the agent's cleanup blocked, all nine deleted (including ones already removed by hand).
 
 ```sh
 cd ~/cloudundo-test

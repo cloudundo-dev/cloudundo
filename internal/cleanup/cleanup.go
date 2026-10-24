@@ -76,53 +76,55 @@ func describe(s journal.UndoStep) string {
 // ClientFor returns a CLI client for a Conn.
 type ClientFor func(awscli.Conn) awscli.Client
 
-// Delete removes one step's backup and marks it cleaned in e. A backup
-// that is already gone counts as deleted.
-func Delete(ctx context.Context, e *journal.Entry, step int, clientFor ClientFor, now time.Time) error {
+// Delete removes one step's backup and marks it cleaned in e. gone is
+// true when the backup was already deleted (by hand, say).
+func Delete(ctx context.Context, e *journal.Entry, step int, clientFor ClientFor, now time.Time) (gone bool, err error) {
 	s := &e.Undo[step]
 	c := clientFor(s.Conn)
-	var err error
 	switch s.Kind {
 	case "rds-snapshot":
 		cluster := s.DB != nil && s.DB.Cluster
-		_, err = c.DeleteDBSnapshot(ctx, s.Snapshot, cluster)
+		gone, err = c.DeleteDBSnapshot(ctx, s.Snapshot, cluster)
 	case "ddb-table-backup":
-		_, err = c.DeleteBackup(ctx, s.BackupArn)
+		gone, err = c.DeleteBackup(ctx, s.BackupArn)
 	case "s3-bucket-copy":
 		bc := s.Conn
 		bc.Region = s.Region
-		err = deleteCopy(ctx, clientFor(bc), s.BackupBucket, s.BackupPrefix)
+		gone, err = deleteCopy(ctx, clientFor(bc), s.BackupBucket, s.BackupPrefix)
 	case "ddb-items":
 		err = os.Remove(s.ItemsFile)
 		if errors.Is(err, os.ErrNotExist) {
-			err = nil
+			gone, err = true, nil
 		}
 	default:
-		return fmt.Errorf("nothing to clean up for a %s step", s.Kind)
+		return false, fmt.Errorf("nothing to clean up for a %s step", s.Kind)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	t := now.UTC()
 	s.Cleaned = &t
-	return nil
+	return gone, nil
 }
 
 // deleteCopy removes every version under a bucket copy's prefix, so the
 // copy stops costing storage (the backup bucket is versioned).
-func deleteCopy(ctx context.Context, c awscli.Client, bucket, prefix string) error {
+func deleteCopy(ctx context.Context, c awscli.Client, bucket, prefix string) (gone bool, err error) {
 	if !strings.HasSuffix(prefix, "/") || strings.Count(prefix, "/") < 2 {
 		// Prefixes are <bucket>/<time>/; anything else is not one of ours.
-		return fmt.Errorf("refusing to delete s3://%s/%s: not a cloudundo copy", bucket, prefix)
+		return false, fmt.Errorf("refusing to delete s3://%s/%s: not a cloudundo copy", bucket, prefix)
 	}
 	vs, err := c.ListVersions(ctx, bucket, prefix)
 	if awscli.Has(err, "NoSuchBucket") {
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
-	return c.DeleteVersions(ctx, bucket, vs)
+	if len(vs) == 0 {
+		return true, nil
+	}
+	return false, c.DeleteVersions(ctx, bucket, vs)
 }
 
 // ParseAge reads "30d", "12h" or "90m".

@@ -26,12 +26,15 @@ func TestDeleteCopyRefusesOtherPrefixes(t *testing.T) {
 	f.Put("cloudundo-backup-1-us-east-1", "other/b", "B")
 	c := awscli.Client{R: f}
 	for _, prefix := range []string{"", "files", "files/", "/"} {
-		if err := deleteCopy(context.Background(), c, "cloudundo-backup-1-us-east-1", prefix); err == nil || !strings.Contains(err.Error(), "not a cloudundo copy") {
+		if _, err := deleteCopy(context.Background(), c, "cloudundo-backup-1-us-east-1", prefix); err == nil || !strings.Contains(err.Error(), "not a cloudundo copy") {
 			t.Errorf("prefix %q: err %v", prefix, err)
 		}
 	}
-	if err := deleteCopy(context.Background(), c, "cloudundo-backup-1-us-east-1", "files/20261022T162314Z/"); err != nil {
-		t.Fatal(err)
+	if gone, err := deleteCopy(context.Background(), c, "cloudundo-backup-1-us-east-1", "files/20261022T162314Z/"); err != nil || gone {
+		t.Fatalf("gone %v err %v", gone, err)
+	}
+	if gone, err := deleteCopy(context.Background(), c, "cloudundo-backup-1-us-east-1", "files/20261022T162314Z/"); err != nil || !gone {
+		t.Fatalf("a second time it is already gone: gone %v err %v", gone, err)
 	}
 	if f.Count("cloudundo-backup-1-us-east-1", "files/") != 0 || f.Count("cloudundo-backup-1-us-east-1", "other/") != 1 {
 		t.Fatal("deleted the wrong objects")

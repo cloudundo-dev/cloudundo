@@ -97,13 +97,18 @@ func cmdCleanup(args []string, stdout, stderr io.Writer) int {
 	changed := map[int]bool{}
 	for _, b := range picked {
 		e := byID[b.Entry]
-		if err := cleanup.Delete(context.Background(), e, b.Step, clientFor(newRunner()), t); err != nil {
+		gone, err := cleanup.Delete(context.Background(), e, b.Step, clientFor(newRunner()), t)
+		if err != nil {
 			failed++
 			fmt.Fprintf(stderr, "#%d: could not delete %s: %v\n", b.Entry, b.What, err)
 			continue
 		}
 		changed[b.Entry] = true
-		fmt.Fprintf(stdout, "#%d: deleted %s\n", b.Entry, b.What)
+		if gone {
+			fmt.Fprintf(stdout, "#%d: already gone: %s\n", b.Entry, b.What)
+		} else {
+			fmt.Fprintf(stdout, "#%d: deleted %s\n", b.Entry, b.What)
+		}
 	}
 	for id := range changed {
 		if err := j.Update(*byID[id]); err != nil {

@@ -6,7 +6,7 @@
 
 cloudundo sits in front of the AWS, Terraform and CloudFormation commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3, DynamoDB or RDS, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back. For ElastiCache (Redis, Valkey) it makes sure a snapshot is kept, or stops the delete.
 
-> **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; and a `terraform destroy` of a database, a bucket and a table. CloudFormation is next to be run on real AWS. The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
+> **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; a `terraform destroy` of a database, a bucket and a table; a CloudFormation deploy that drops a table and a stack delete; and `cleanup`. The agent hooks follow each agent's documentation and are being tried inside Claude Code, Cursor and Codex ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
 
 ```text
 you:    "clean up the old test data"
@@ -230,7 +230,7 @@ Run those with your own admin credentials. The command also prints how to create
 3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; being tried inside each agent.
 4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
 5. ~~RDS snapshots before deletes, ElastiCache snapshot rules, Terraform plans.~~ Done and run on real AWS.
-6. ~~CloudFormation stacks and change sets.~~ Done; real-AWS run next.
+6. ~~CloudFormation stacks and change sets.~~ Done and run on real AWS.
 7. ~~`cloudundo cleanup` for old backups.~~ Done.
 8. CDK, SAM, Pulumi and Terragrunt plans; backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
 

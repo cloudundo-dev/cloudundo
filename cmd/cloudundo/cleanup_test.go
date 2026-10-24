@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -118,5 +119,28 @@ func TestAgentsCannotRunCleanup(t *testing.T) {
 		if code, _, _ := hookRun(t, agent, in); code != 0 {
 			t.Fatalf("%s: listing backups is harmless, got exit %d", agent, code)
 		}
+	}
+}
+
+func TestCleanupSaysWhenABackupWasAlreadyGone(t *testing.T) {
+	f := withFake(t)
+	f.CreateTable("t1", "pk")
+	runCLI(t, "protect", "--", "aws dynamodb delete-table --table-name t1")
+	arn := journalEntries(t)[0].Undo[0].BackupArn
+	runCLI(t, "cleanup", "1", "--yes")
+	if f.HasBackup(arn) {
+		t.Fatal("not deleted")
+	}
+
+	f.CreateTable("t2", "pk")
+	runCLI(t, "protect", "--", "aws dynamodb delete-table --table-name t2")
+	arn2 := journalEntries(t)[1].Undo[0].BackupArn
+	// Someone deletes the backup by hand first.
+	if _, err := (awscli.Client{R: f}).DeleteBackup(context.Background(), arn2); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := runCLI(t, "cleanup", "2", "--yes")
+	if code != 0 || !strings.Contains(out, "#2: already gone") {
+		t.Fatalf("exit %d\n%s", code, out)
 	}
 }
