@@ -168,7 +168,11 @@ func cmdLog(args []string, stdout, stderr io.Writer) int {
 	// Newest first.
 	for i := len(entries) - 1; i >= 0; i-- {
 		e := entries[i]
-		fmt.Fprintf(stdout, "#%-4d %s  %-6s %s\n", e.ID, e.Time.Local().Format("2006-01-02 15:04"), e.Status, e.Command)
+		by := ""
+		if e.Agent != "" {
+			by = "  (" + e.Agent + ")"
+		}
+		fmt.Fprintf(stdout, "#%-4d %s  %-6s %s%s\n", e.ID, e.Time.Local().Format("2006-01-02 15:04"), e.Status, e.Command, by)
 		for _, eff := range e.Effects {
 			fmt.Fprintln(stdout, "        "+describe(eff))
 		}

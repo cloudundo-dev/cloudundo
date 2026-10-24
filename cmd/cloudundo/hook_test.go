@@ -454,3 +454,13 @@ func TestClaudeHookLeavesCursorShellCallsToTheCursorHook(t *testing.T) {
 		t.Fatal("the Claude Code hook changed the bucket; the Cursor hook should do that")
 	}
 }
+
+func TestLogNamesTheAgent(t *testing.T) {
+	f := withFake(t)
+	f.CreateBucket("b", "us-east-1", "")
+	f.Put("b", "k", "v")
+	hookRun(t, agentClaude, claudeInput("aws s3 rm s3://b/k"))
+	if _, out, _ := runCLI(t, "log"); !strings.Contains(out, "aws s3 rm s3://b/k  (claude-code)") {
+		t.Fatalf("log does not name the agent:\n%s", out)
+	}
+}
