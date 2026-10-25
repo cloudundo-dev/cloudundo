@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cloudundo/cloudundo/internal/effects"
 	"io"
 	"os"
 	"strings"
@@ -72,12 +73,24 @@ func cmdHook(args []string, stdout, stderr io.Writer) (code int) {
 	// Run where the agent runs the command, so relative paths (a
 	// terraform directory, a plan file) mean the same thing.
 	agentCwd = hookCwd(body)
+	dirKnown := false
 	if dir := agentCwd; dir != "" {
 		if st, err := os.Stat(dir); err == nil && st.IsDir() {
 			if err := os.Chdir(dir); err != nil {
 				return block("cloudundo: blocked: cannot enter " + dir + ": " + err.Error())
 			}
+			dirKnown = true
 		}
+	}
+	// Without the agent's folder, cloudundo would read terraform files (or
+	// a CloudFormation template) from wherever the hook happens to start,
+	// such as ~/.cursor, and could protect the wrong thing.
+	if !dirKnown && effects.NeedsDir(line) {
+		where := "did not say which folder it runs the command in"
+		if agentCwd != "" {
+			where = "named a folder that does not exist here (" + agentCwd + ")"
+		}
+		return block("cloudundo: blocked: the agent " + where + ", and this command reads its files from that folder. Run it with a full path (terraform -chdir=/path/to/infra ...), or run it yourself.")
 	}
 
 	o := decide(line, agent)
@@ -204,12 +217,26 @@ func shellQuote(s string) string {
 var agentCwd string
 
 // hookCwd is the agent's working directory from the hook input, if given.
+// Cursor sends an empty cwd and the project folder in workspace_roots;
+// with several roots the folder is not known.
 func hookCwd(body []byte) string {
 	var in struct {
-		Cwd string `json:"cwd"`
+		Cwd       string `json:"cwd"`
+		ToolInput struct {
+			Cwd string `json:"cwd"`
+		} `json:"tool_input"`
+		Roots []string `json:"workspace_roots"`
 	}
 	_ = json.Unmarshal(body, &in)
-	return in.Cwd
+	switch {
+	case in.Cwd != "":
+		return in.Cwd
+	case in.ToolInput.Cwd != "":
+		return in.ToolInput.Cwd
+	case len(in.Roots) == 1:
+		return in.Roots[0]
+	}
+	return ""
 }
 
 // hookReadTimeout bounds the wait for the agent's input, so a hook that

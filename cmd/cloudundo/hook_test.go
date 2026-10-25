@@ -582,3 +582,69 @@ func TestInstallPointsAnOldHookAtThisProgram(t *testing.T) {
 		t.Fatalf("second install: %d %s", code, out)
 	}
 }
+
+// fakeTerraform puts a terraform on PATH that logs the folder it runs in
+// and plans a destroy of a state with one resource and no data.
+func fakeTerraform(t *testing.T) (log string) {
+	t.Helper()
+	bin := t.TempDir()
+	log = filepath.Join(bin, "log")
+	script := "#!/bin/sh\necho \"$PWD\" >> " + log + "\ncase \"$1\" in show) echo '{\"resource_changes\":[],\"prior_state\":{\"values\":{\"root_module\":{\"resources\":[{\"mode\":\"managed\"}]}}}}';; esac\n"
+	if err := os.WriteFile(filepath.Join(bin, "terraform"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+// Found in Cursor: its hook input has an empty cwd and the project in
+// workspace_roots. The plan was read in ~/.cursor, where the hook starts.
+func TestCursorHookUsesTheWorkspaceRoot(t *testing.T) {
+	withFake(t)
+	log := fakeTerraform(t)
+	project, _ := filepath.EvalSymlinks(t.TempDir())
+	t.Chdir(t.TempDir())
+	in, _ := json.Marshal(map[string]any{
+		"hook_event_name": "beforeShellExecution", "command": "terraform destroy -auto-approve",
+		"cwd": "", "workspace_roots": []string{project},
+	})
+	if code, out, errOut := hookRun(t, agentCursor, string(in)); code != 0 {
+		t.Fatalf("exit %d %s%s", code, out, errOut)
+	}
+	b, _ := os.ReadFile(log)
+	if got := strings.TrimSpace(strings.Split(string(b), "\n")[0]); got != project {
+		t.Fatalf("terraform ran in %q, want %q", got, project)
+	}
+}
+
+func TestHookWithoutAFolderBlocksTerraformOnly(t *testing.T) {
+	f := withFake(t)
+	log := fakeTerraform(t)
+	t.Chdir(t.TempDir())
+	for _, roots := range [][]string{nil, {"/a", "/b"}} {
+		in, _ := json.Marshal(map[string]any{
+			"hook_event_name": "beforeShellExecution", "command": "terraform destroy -auto-approve",
+			"cwd": "", "workspace_roots": roots,
+		})
+		code, out, _ := hookRun(t, agentCursor, string(in))
+		if code != 2 || !strings.Contains(out, "did not say which folder") {
+			t.Fatalf("roots %v: exit %d %s", roots, code, out)
+		}
+	}
+	if b, _ := os.ReadFile(log); len(b) != 0 {
+		t.Fatal("terraform ran without a folder")
+	}
+	// A full path needs no folder.
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	in, _ := json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "command": "terraform -chdir=" + dir + " destroy -auto-approve", "cwd": ""})
+	if code, out, errOut := hookRun(t, agentCursor, string(in)); code != 0 {
+		t.Fatalf("-chdir: exit %d %s%s", code, out, errOut)
+	}
+	// Commands that read no files are not affected.
+	f.CreateBucket("b", "us-east-1", "")
+	f.Put("b", "k", "v")
+	in, _ = json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "command": "aws s3 rm s3://b/k", "cwd": ""})
+	if code, out, errOut := hookRun(t, agentCursor, string(in)); code != 0 {
+		t.Fatalf("aws: exit %d %s%s", code, out, errOut)
+	}
+}

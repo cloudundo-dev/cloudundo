@@ -189,7 +189,7 @@ Plainly, so you can decide where it fits:
 - **Other deploy tools are only partly seen.** Their destroy commands (`cdk destroy`, `sam delete`, `pulumi destroy`, `terragrunt destroy`) are blocked, but `cdk deploy`, `sam deploy`, `pulumi up` and `terragrunt apply` can also replace or remove resources, and cloudundo does not see what they do. Neither does it see `make destroy` or a script that runs Terraform inside.
 - **CloudFormation templates in YAML**: cloudundo cannot read their `DeletionPolicy`, so it backs up every data resource in the stack, including ones the template keeps. (CDK and JSON templates are read.)
 - **Terraform commands take longer**: cloudundo makes a plan before the agent's apply or destroy makes its own, so expect up to twice the planning time.
-- **Terraform needs to plan locally.** Remote runs on HCP Terraform / Terraform Cloud cannot save a plan, so cloudundo blocks those. A provider that uses a different AWS account than your current credentials is blocked too, with the account named.
+- **Terraform needs to plan locally.** Remote runs on HCP Terraform / Terraform Cloud cannot save a plan, so cloudundo blocks those. A provider that uses a different AWS account than your current credentials is blocked too, with the account named. cloudundo reads the plan in the folder the agent says the command runs in (in Cursor, the open project). If the agent gives no folder, or the plan finds no Terraform state there, a `terraform destroy` is blocked rather than let through with nothing saved; `terraform -chdir=/full/path` works anywhere.
 - **Platforms outside AWS** (Supabase, Railway, Vercel, Replit) are not covered.
 - **Big buckets:** a bucket delete is protected by copying it, up to 5 GB by default.
 

@@ -120,3 +120,18 @@ func joinDir(base, dir string) string {
 	}
 	return filepath.Join(base, dir)
 }
+
+// NeedsDir reports whether line reads files from the folder it runs in:
+// a terraform plan or apply with a relative folder, or a CloudFormation
+// deploy (its --template-file).
+func NeedsDir(line string) bool {
+	for _, e := range Analyze(line) {
+		switch {
+		case e.Kind == TerraformChange && e.TF != nil && !filepath.IsAbs(e.TF.Dir):
+			return true
+		case e.Kind == StackChange && e.Stack != nil && e.Stack.Op == "deploy":
+			return true
+		}
+	}
+	return false
+}
