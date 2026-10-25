@@ -417,7 +417,7 @@ func TestHookRunsInTheAgentsDirectory(t *testing.T) {
 	withFake(t)
 	bin := t.TempDir()
 	log := filepath.Join(bin, "log")
-	script := "#!/bin/sh\necho \"$PWD\" >> " + log + "\ncase \"$1\" in show) echo '{\"resource_changes\":[]}';; esac\n"
+	script := "#!/bin/sh\necho \"$PWD\" >> " + log + "\ncase \"$1\" in show) echo '{\"resource_changes\":[],\"prior_state\":{\"values\":{\"root_module\":{\"resources\":[{\"mode\":\"managed\"}]}}}}';; esac\n"
 	if err := os.WriteFile(filepath.Join(bin, "terraform"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

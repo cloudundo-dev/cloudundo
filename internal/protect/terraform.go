@@ -277,3 +277,48 @@ func checkAccounts(ctx context.Context, body []byte, c awscli.Client) error {
 	}
 	return nil
 }
+
+// hasState reports whether a plan's prior state holds any managed
+// resource, in the root module or a child module.
+func hasState(body []byte) bool {
+	var p struct {
+		PriorState struct {
+			Values struct {
+				RootModule stateModule `json:"root_module"`
+			} `json:"values"`
+		} `json:"prior_state"`
+	}
+	if json.Unmarshal(body, &p) != nil {
+		return false
+	}
+	return p.PriorState.Values.RootModule.managed()
+}
+
+type stateModule struct {
+	Resources []struct {
+		Mode string `json:"mode"`
+	} `json:"resources"`
+	ChildModules []stateModule `json:"child_modules"`
+}
+
+func (m stateModule) managed() bool {
+	for _, r := range m.Resources {
+		if r.Mode == "managed" {
+			return true
+		}
+	}
+	for _, c := range m.ChildModules {
+		if c.managed() {
+			return true
+		}
+	}
+	return false
+}
+
+// tfDir is the absolute folder a plan is read in.
+func tfDir(dir string) string {
+	if a, err := filepath.Abs(dir); err == nil {
+		return a
+	}
+	return dir
+}

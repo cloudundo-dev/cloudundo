@@ -71,7 +71,8 @@ func cmdHook(args []string, stdout, stderr io.Writer) (code int) {
 	}
 	// Run where the agent runs the command, so relative paths (a
 	// terraform directory, a plan file) mean the same thing.
-	if dir := hookCwd(body); dir != "" {
+	agentCwd = hookCwd(body)
+	if dir := agentCwd; dir != "" {
 		if st, err := os.Stat(dir); err == nil && st.IsDir() {
 			if err := os.Chdir(dir); err != nil {
 				return block("cloudundo: blocked: cannot enter " + dir + ": " + err.Error())
@@ -197,6 +198,10 @@ func shellQuote(s string) string {
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// agentCwd is the folder the agent said it runs the command in, kept in
+// the journal next to the folder cloudundo actually used.
+var agentCwd string
 
 // hookCwd is the agent's working directory from the hook input, if given.
 func hookCwd(body []byte) string {

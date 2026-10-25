@@ -119,6 +119,9 @@ func TestTerraformBlocks(t *testing.T) {
 			"change":{"actions":["delete"],"before":{"db_snapshot_identifier":"keep"}}}]}`, nil), "deletes a database snapshot"},
 		"backup bucket": {"terraform destroy", cannedPlanner(`{"resource_changes":[{"address":"aws_s3_bucket.b","mode":"managed","type":"aws_s3_bucket",
 			"change":{"actions":["delete"],"before":{"bucket":"cloudundo-backup-123456789012-us-east-1"}}}]}`, nil), "keeps its backups"},
+		// Found in Cursor: the plan was read where there was no state, saw
+		// nothing to delete, and the destroy then deleted three resources.
+		"empty state": {"terraform destroy -auto-approve", cannedPlanner(`{"format_version":"1.2","resource_changes":[]}`, nil), "found no resources in its state"},
 		"missing name": {"terraform destroy", cannedPlanner(`{"resource_changes":[{"address":"aws_dynamodb_table.t","mode":"managed","type":"aws_dynamodb_table",
 			"change":{"actions":["delete"],"before":{}}}]}`, nil), "cannot tell exactly"},
 	} {
@@ -147,6 +150,15 @@ func TestTerraformReplaceAndNoData(t *testing.T) {
 
 	_, r = w.protectTF("terraform apply", cannedPlanner(`{"resource_changes":[{"address":"aws_vpc.v","mode":"managed","type":"aws_vpc","change":{"actions":["delete"],"before":{}}}]}`, nil))
 	if !r.Allowed || len(r.Undo) != 0 || !strings.Contains(strings.Join(r.Notes, " "), "deletes no data") {
+		t.Fatalf("r = %+v", r)
+	}
+}
+
+func TestTerraformDestroyOfStateWithNothingToDelete(t *testing.T) {
+	w := newWorld(t)
+	plan := `{"resource_changes":[],"prior_state":{"values":{"root_module":{"child_modules":[{"resources":[{"mode":"data"},{"mode":"managed"}]}]}}}}`
+	_, r := w.protectTF("terraform destroy", cannedPlanner(plan, nil))
+	if !r.Allowed || !strings.Contains(strings.Join(r.Notes, " "), "Plan read in") {
 		t.Fatalf("r = %+v", r)
 	}
 }

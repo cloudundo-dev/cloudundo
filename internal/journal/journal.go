@@ -18,11 +18,15 @@ import (
 
 // Entry is one recorded command.
 type Entry struct {
-	ID      int              `json:"id"`
-	Time    time.Time        `json:"time"`
-	Command string           `json:"command"`
-	Agent   string           `json:"agent,omitempty"`
-	Effects []effects.Effect `json:"effects"`
+	ID      int       `json:"id"`
+	Time    time.Time `json:"time"`
+	Command string    `json:"command"`
+	Agent   string    `json:"agent,omitempty"`
+	// Dir is the folder cloudundo read the command in (the agent's).
+	Dir string `json:"dir,omitempty"`
+	// AgentDir is the folder the agent's hook input named, if it differs.
+	AgentDir string           `json:"agent_dir,omitempty"`
+	Effects  []effects.Effect `json:"effects"`
 	// Protection lists what cloudundo did before the command ran.
 	Protection []string `json:"protection,omitempty"`
 	// Notes are things the user should know (costs, undo windows).

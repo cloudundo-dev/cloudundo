@@ -144,8 +144,13 @@ func decide(line, agent string) (o outcome) {
 	if !r.Allowed {
 		status = "blocked"
 	}
+	wd, _ := os.Getwd()
+	agentDir := agentCwd
+	if agentDir == wd {
+		agentDir = ""
+	}
 	entry, err := j.Append(journal.Entry{
-		Time: now().UTC(), Command: line, Agent: agent, Effects: effs,
+		Time: now().UTC(), Command: line, Agent: agent, Dir: wd, AgentDir: agentDir, Effects: effs,
 		Protection: r.Protection, Notes: r.Notes, Blocked: r.Blocked, Undo: r.Undo, Status: status,
 	})
 	if err != nil {

@@ -217,6 +217,14 @@ func (r *Result) terraformPlan(ctx context.Context, e effects.Effect, clientFor 
 		r.Blocked = append(r.Blocked, err.Error())
 		return nil, false
 	}
+	if e.TF.Destroy && len(derived) == 0 && len(others) == 0 && !hasState(body) {
+		// A destroy with an empty state deletes nothing here. If it is run
+		// somewhere else, the state there is unknown: stop rather than
+		// let it through with nothing saved.
+		r.Blocked = append(r.Blocked, fmt.Sprintf("%q: terraform found no resources in its state in %s, so cloudundo cannot see what this command deletes. Run it from the folder that holds the Terraform state; if this is that folder and nothing is deployed, there is nothing to destroy.",
+			e.Command, tfDir(e.TF.Dir)))
+		return nil, false
+	}
 	if len(derived) > 0 {
 		if err := checkAccounts(ctx, body, clientFor(e.Conn)); err != nil {
 			r.Blocked = append(r.Blocked, fmt.Sprintf("%q: %v", e.Command, err))
@@ -228,7 +236,7 @@ func (r *Result) terraformPlan(ctx context.Context, e effects.Effect, clientFor 
 			e.Command, len(others), shortList(others, 4)))
 	}
 	if len(derived) == 0 {
-		r.Notes = append(r.Notes, fmt.Sprintf("%q deletes no data cloudundo knows (S3, DynamoDB, RDS, ElastiCache).", e.Command))
+		r.Notes = append(r.Notes, fmt.Sprintf("%q deletes no data cloudundo knows (S3, DynamoDB, RDS, ElastiCache). Plan read in %s.", e.Command, tfDir(e.TF.Dir)))
 	}
 	return derived, true
 }
