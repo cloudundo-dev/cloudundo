@@ -177,7 +177,7 @@ func installOne(agent string, write bool, home, exe string, stdout, stderr io.Wr
 		return 0
 	}
 
-	backup, err := addHook(file, event, entry, agent)
+	backup, updated, err := addHook(file, event, entry, agent, command)
 	switch {
 	case errors.Is(err, errInstalled):
 		fmt.Fprintf(stdout, "The cloudundo hook is already in %s.\n", file)
@@ -186,7 +186,11 @@ func installOne(agent string, write bool, home, exe string, stdout, stderr io.Wr
 		fmt.Fprintln(stderr, "cloudundo install:", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Added the cloudundo hook to %s.\n", file)
+	if updated {
+		fmt.Fprintf(stdout, "Updated the cloudundo hook in %s to run %s.\n", file, exe)
+	} else {
+		fmt.Fprintf(stdout, "Added the cloudundo hook to %s.\n", file)
+	}
 	if backup != "" {
 		fmt.Fprintf(stdout, "The old file is kept at %s.\n", backup)
 	}
@@ -210,7 +214,10 @@ var errInstalled = errors.New("already installed")
 
 // addHook appends entry under hooks.<event> in a JSON settings file,
 // keeping everything else. It refuses to touch a file it cannot parse.
-func addHook(file, event string, entry map[string]any, agent string) (backup string, err error) {
+// If a cloudundo hook is there already but runs another program (an older
+// copy somewhere else), it is pointed at command instead, and updated is
+// true.
+func addHook(file, event string, entry map[string]any, agent, command string) (backup string, updated bool, err error) {
 	settings := map[string]any{}
 	old, err := os.ReadFile(file)
 	mode := fs.FileMode(0o600)
@@ -218,14 +225,14 @@ func addHook(file, event string, entry map[string]any, agent string) (backup str
 	case errors.Is(err, fs.ErrNotExist):
 		old = nil
 	case err != nil:
-		return "", err
+		return "", false, err
 	default:
 		if st, err := os.Stat(file); err == nil {
 			mode = st.Mode().Perm()
 		}
 		if len(bytes.TrimSpace(old)) > 0 {
 			if err := json.Unmarshal(old, &settings); err != nil || settings == nil {
-				return "", fmt.Errorf("%s is not a JSON object, so it was not changed: %v", file, err)
+				return "", false, fmt.Errorf("%s is not a JSON object, so it was not changed: %v", file, err)
 			}
 		}
 	}
@@ -233,19 +240,24 @@ func addHook(file, event string, entry map[string]any, agent string) (backup str
 	hooks := map[string]any{}
 	if h, ok := settings["hooks"]; ok {
 		if hooks, ok = h.(map[string]any); !ok {
-			return "", fmt.Errorf(`"hooks" in %s is not an object, so it was not changed`, file)
+			return "", false, fmt.Errorf(`"hooks" in %s is not an object, so it was not changed`, file)
 		}
 	}
 	var list []any
 	if l, ok := hooks[event]; ok {
 		if list, ok = l.([]any); !ok {
-			return "", fmt.Errorf(`"hooks.%s" in %s is not a list, so it was not changed`, event, file)
+			return "", false, fmt.Errorf(`"hooks.%s" in %s is not a list, so it was not changed`, event, file)
 		}
 	}
-	if hasCloudundo(list, agent) {
-		return "", errInstalled
+	if found, changed := pointCloudundo(list, agent, command); found {
+		if !changed {
+			return "", false, errInstalled
+		}
+		updated = true
+	} else {
+		list = append(list, entry)
 	}
-	hooks[event] = append(list, entry)
+	hooks[event] = list
 	settings["hooks"] = hooks
 	if agent == agentCursor {
 		if _, ok := settings["version"]; !ok {
@@ -255,11 +267,11 @@ func addHook(file, event string, entry map[string]any, agent string) (backup str
 
 	body, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	body = append(body, '\n')
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if old != nil {
 		backup = file + ".before-cloudundo"
@@ -270,49 +282,52 @@ func addHook(file, event string, entry map[string]any, agent string) (backup str
 			backup = fmt.Sprintf("%s.before-cloudundo.%d", file, i)
 		}
 		if err := os.WriteFile(backup, old, mode); err != nil {
-			return "", fmt.Errorf("could not back up %s, so it was not changed: %w", file, err)
+			return "", false, fmt.Errorf("could not back up %s, so it was not changed: %w", file, err)
 		}
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(file), ".cloudundo-*")
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(body); err != nil {
 		tmp.Close()
-		return "", err
+		return "", false, err
 	}
 	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close()
-		return "", err
+		return "", false, err
 	}
 	if err := tmp.Close(); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return backup, os.Rename(tmp.Name(), file)
+	return backup, updated, os.Rename(tmp.Name(), file)
 }
 
-// hasCloudundo reports whether a hook list already runs cloudundo's hook
-// for agent, at any depth.
-func hasCloudundo(v any, agent string) bool {
+// pointCloudundo finds cloudundo's hook for agent in a hook list, at any
+// depth, and makes each one run command. found is true when there was
+// one; changed is true when one ran something else.
+func pointCloudundo(v any, agent, command string) (found, changed bool) {
 	switch x := v.(type) {
 	case []any:
 		for _, e := range x {
-			if hasCloudundo(e, agent) {
-				return true
-			}
+			f, c := pointCloudundo(e, agent, command)
+			found, changed = found || f, changed || c
 		}
 	case map[string]any:
 		if c, ok := x["command"].(string); ok && strings.Contains(c, "cloudundo") && strings.HasSuffix(strings.TrimSpace(c), "hook "+agent) {
-			return true
+			if c != command {
+				x["command"] = command
+				return true, true
+			}
+			return true, false
 		}
 		for _, e := range x {
-			if hasCloudundo(e, agent) {
-				return true
-			}
+			f, c := pointCloudundo(e, agent, command)
+			found, changed = found || f, changed || c
 		}
 	}
-	return false
+	return found, changed
 }
 
 // quoteExe makes the program path safe in a shell command line.

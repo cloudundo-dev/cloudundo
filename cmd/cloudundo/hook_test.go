@@ -556,3 +556,29 @@ func TestInstallWithNoAgentSaysSo(t *testing.T) {
 		t.Fatalf("exit %d %s", code, errOut)
 	}
 }
+
+func TestInstallPointsAnOldHookAtThisProgram(t *testing.T) {
+	home := withInstallHome(t)
+	file := filepath.Join(home, ".cursor", "hooks.json")
+	os.MkdirAll(filepath.Dir(file), 0o755)
+	orig := `{"version":1,"hooks":{"beforeShellExecution":[{"command":"other"},{"command":"/home/me/cloudundo-test/cloudundo hook cursor","timeout":600,"failClosed":true}]}}`
+	os.WriteFile(file, []byte(orig), 0o600)
+
+	code, out, errOut := runCLI(t, "install", "cursor", "--write")
+	if code != 0 || !strings.Contains(out, "Updated") {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	b, _ := os.ReadFile(file)
+	var s map[string]any
+	json.Unmarshal(b, &s)
+	list := s["hooks"].(map[string]any)["beforeShellExecution"].([]any)
+	if len(list) != 2 || list[1].(map[string]any)["command"] != `'/opt/my tools/cloudundo' hook cursor` || list[0].(map[string]any)["command"] != "other" {
+		t.Fatalf("hooks = %s", b)
+	}
+	if bk, _ := os.ReadFile(file + ".before-cloudundo"); string(bk) != orig {
+		t.Fatalf("backup = %q", bk)
+	}
+	if code, out, _ := runCLI(t, "install", "cursor", "--write"); code != 0 || !strings.Contains(out, "already") {
+		t.Fatalf("second install: %d %s", code, out)
+	}
+}
