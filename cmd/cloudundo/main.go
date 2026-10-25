@@ -33,7 +33,7 @@ Usage:
   cloudundo cleanup [<id>...] [--older-than 30d] [--all] [--yes]
                                            list the backups cloudundo kept; --yes deletes the chosen ones
   cloudundo check [--json] -- <command>     only show what a command would change
-  cloudundo install <agent> [--write]       set up the hook for claude-code, cursor or codex
+  cloudundo install [agent] [--write]       set up the hook for the agents found (or claude-code, cursor, codex)
   cloudundo policy [--account ID] [--region R] [--keep-versions]
                                            print an IAM policy that stops the agent's keys from deleting backups
   cloudundo hook <agent>                    what the agent runs before each shell command (reads JSON on stdin)
