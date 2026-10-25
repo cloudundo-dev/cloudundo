@@ -552,7 +552,7 @@ func TestInstallFindsEveryAgent(t *testing.T) {
 func TestInstallWithNoAgentSaysSo(t *testing.T) {
 	withInstallHome(t)
 	noAgentsOnPath(t)
-	if code, _, errOut := runCLI(t, "install", "--write"); code != 2 || !strings.Contains(errOut, "found no Claude Code, Cursor or Codex") {
+	if code, _, errOut := runCLI(t, "install", "--write"); code != 2 || !strings.Contains(errOut, "found no Claude Code, Cursor or Codex") || !strings.Contains(errOut, "Your own agent") {
 		t.Fatalf("exit %d %s", code, errOut)
 	}
 }

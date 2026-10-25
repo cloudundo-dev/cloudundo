@@ -90,10 +90,11 @@ import subprocess
 def run_agent_command(command: str, cwd: str) -> str:
     guard = subprocess.run(["cloudundo", "protect", "--", command],
                            cwd=cwd, capture_output=True, text=True)
+    note = guard.stdout + guard.stderr
     if guard.returncode != 0:
-        return "Not run. cloudundo said:\n" + guard.stderr
+        return "Not run. cloudundo said:\n" + note
     result = subprocess.run(command, shell=True, cwd=cwd, capture_output=True, text=True)
-    return guard.stderr + result.stdout + result.stderr
+    return note + result.stdout + result.stderr
 ```
 
 Return cloudundo's message to the model either way, so it knows what was protected or why the command was stopped. `cloudundo protect --json` gives the same result as JSON.

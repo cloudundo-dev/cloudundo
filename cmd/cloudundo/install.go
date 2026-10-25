@@ -68,8 +68,7 @@ func cmdInstall(args []string, stdout, stderr io.Writer) int {
 
 	found := detectAgents(home)
 	if len(found) == 0 {
-		fmt.Fprintln(stderr, "cloudundo install: found no Claude Code, Cursor or Codex on this computer.")
-		fmt.Fprintln(stderr, installUsage)
+		fmt.Fprint(stderr, notFound)
 		return 2
 	}
 	if !*write {
@@ -93,6 +92,14 @@ func cmdInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	return code
 }
+
+const notFound = `cloudundo install: found no Claude Code, Cursor or Codex on this computer.
+
+- If you use one of them, open it once (so it creates its settings folder) and run this again,
+  or name it: cloudundo install claude-code --write   (or cursor, or codex)
+- If your agent is one you built, call cloudundo before each command it runs:
+  see "Your own agent" in https://github.com/OWNER/cloudundo#your-own-agent
+`
 
 const installUsage = "usage: cloudundo install [claude-code|cursor|codex] [--write]"
 

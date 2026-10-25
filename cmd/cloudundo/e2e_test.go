@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -185,5 +186,66 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(f.Item("Users", `{"pk":{"S":"u1"}}`), "Ali") {
 		t.Fatal("item not restored")
+	}
+
+	// 5. Your own agent: the Python example from the README, as written.
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Log("no python3: README example not run")
+		return
+	}
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, after, ok := strings.Cut(string(readme), "### Your own agent")
+	_, after, ok2 := strings.Cut(after, "```python\n")
+	example, _, ok3 := strings.Cut(after, "```")
+	if !ok || !ok2 || !ok3 {
+		t.Fatal("README has no Python example under \"Your own agent\"")
+	}
+	f.SetClock(time.Now().UTC().Add(-time.Hour))
+	f.Put("uploads", "c.txt", "keep me")
+	f.SetClock(time.Now().UTC().Add(2 * time.Minute))
+	script := example + `
+import sys
+print(run_agent_command(sys.argv[1], "."))
+`
+	ownEnv := append([]string{"PATH=" + bin + ":" + tmp + ":/usr/bin:/bin"}, env[1:]...)
+	runPy := func(command string) string {
+		cmd := exec.Command(py, "-I", "-c", script, command)
+		cmd.Env, cmd.Dir = ownEnv, tmp
+		b, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("python: %v\n%s", err, b)
+		}
+		return string(b)
+	}
+	out = runPy("aws s3api delete-object --bucket uploads --key c.txt")
+	if !strings.Contains(out, "protected #") {
+		t.Fatalf("own agent, delete: %s", out)
+	}
+	if _, ok := f.Get("uploads", "c.txt"); ok {
+		t.Fatalf("own agent: the command did not run: %s", out)
+	}
+	out = runPy("aws s3 rm s3://$B --recursive")
+	if !strings.HasPrefix(out, "Not run.") {
+		t.Fatalf("own agent, unknown target: %s", out)
+	}
+	entries = nil
+	_, out, _ = run("", filepath.Join(bin, "cloudundo"), "log", "--json")
+	json.Unmarshal([]byte(out), &entries)
+	id := 0
+	for _, e := range entries {
+		if strings.Contains(e.Command, "c.txt") {
+			id = e.ID
+		}
+	}
+	code, out, errOut = run("", filepath.Join(bin, "cloudundo"), "undo", fmt.Sprint(id), "--yes")
+	if code != 0 || !strings.Contains(out, "Restored") {
+		t.Fatalf("undo own agent #%d: exit %d\n%s%s", id, code, out, errOut)
+	}
+	if v, _ := f.Get("uploads", "c.txt"); v != "keep me" {
+		t.Fatalf("c.txt after undo = %q", v)
 	}
 }
