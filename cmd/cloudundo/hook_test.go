@@ -648,3 +648,13 @@ func TestHookWithoutAFolderBlocksTerraformOnly(t *testing.T) {
 		t.Fatalf("aws: exit %d %s%s", code, out, errOut)
 	}
 }
+
+func TestLogShowsWhatWasSaved(t *testing.T) {
+	f := withFake(t)
+	f.CreateBucket("b", "us-east-1", "")
+	f.Put("b", "k", "v")
+	hookRun(t, agentClaude, claudeInput("aws s3 rm s3://b/k"))
+	if _, out, _ := runCLI(t, "log"); !strings.Contains(out, "saved: ") || strings.Contains(out, "saved: nothing") {
+		t.Fatalf("log does not show the protection:\n%s", out)
+	}
+}

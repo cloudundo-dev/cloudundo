@@ -176,6 +176,16 @@ func cmdLog(args []string, stdout, stderr io.Writer) int {
 		for _, eff := range e.Effects {
 			fmt.Fprintln(stdout, "        "+describe(eff))
 		}
+		// What was saved, so a protected entry with nothing to restore
+		// (a plan that deleted no data) does not look like one with backups.
+		if e.Status == "protected" || e.Status == "undone" {
+			for _, p := range e.Protection {
+				fmt.Fprintln(stdout, "        saved: "+p)
+			}
+			if len(e.Protection) == 0 && len(e.Undo) == 0 {
+				fmt.Fprintln(stdout, "        saved: nothing (no data to protect)")
+			}
+		}
 	}
 	return 0
 }
