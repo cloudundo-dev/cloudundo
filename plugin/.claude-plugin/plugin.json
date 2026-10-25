@@ -6,8 +6,8 @@
   "author": {
     "name": "Youssef Khalil"
   },
-  "homepage": "https://github.com/OWNER/cloudundo",
-  "repository": "https://github.com/OWNER/cloudundo",
+  "homepage": "https://github.com/cloudundo-dev/cloudundo",
+  "repository": "https://github.com/cloudundo-dev/cloudundo",
   "license": "Apache-2.0",
   "keywords": ["aws", "s3", "dynamodb", "rds", "terraform", "backup", "undo", "safety"]
 }

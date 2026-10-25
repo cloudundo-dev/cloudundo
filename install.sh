@@ -2,22 +2,19 @@
 # Install cloudundo: downloads the release for this computer, checks its
 # SHA-256 against the release's checksums.txt, and puts it in ~/.local/bin.
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/install.sh | sh
 #
 # Settings:
 #   CLOUDUNDO_VERSION      a release tag such as v0.1.0 (default: latest)
 #   CLOUDUNDO_INSTALL_DIR  where to put it (default: ~/.local/bin)
 set -eu
 
-# Set once the repository is public. The script refuses to run until then,
-# so it can never download from a repository nobody checked.
-REPO="${CLOUDUNDO_REPO:-OWNER/cloudundo}"
+# Where releases come from. CLOUDUNDO_REPO overrides it (for a fork).
+REPO="${CLOUDUNDO_REPO:-cloudundo-dev/cloudundo}"
 VERSION="${CLOUDUNDO_VERSION:-latest}"
 DIR="${CLOUDUNDO_INSTALL_DIR:-$HOME/.local/bin}"
 
 fail() { echo "cloudundo install: $*" >&2; exit 1; }
-
-case "$REPO" in OWNER/*) fail "this copy of install.sh has no repository set (CLOUDUNDO_REPO)";; esac
 
 case "$(uname -s)" in
   Linux) os=linux ;;

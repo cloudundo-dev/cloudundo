@@ -148,7 +148,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
       <a href="#how">How it works</a>
       <a href="#covers">What it covers</a>
       <a href="#setup">Set up</a>
-      <a href="https://github.com/OWNER/cloudundo">GitHub</a>
+      <a href="https://github.com/cloudundo-dev/cloudundo">GitHub</a>
     </nav>
   </header>
 
@@ -157,11 +157,11 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
       <h1>Your agent can delete anything. <em>You can always get it back.</em></h1>
       <p class="lede">cloudundo sits in front of the AWS, Terraform and CloudFormation commands that Claude Code, Cursor and Codex run. Before a command deletes your S3, DynamoDB or RDS data, it makes that data recoverable. Then one command brings it back.</p>
       <div class="install">
-        <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh</code>
+        <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/install.sh | sh</code>
         <button type="button" id="copy-install" aria-label="Copy the install command">Copy</button>
       </div>
       <div class="links">
-        <a href="https://github.com/OWNER/cloudundo">Source on GitHub</a>
+        <a href="https://github.com/cloudundo-dev/cloudundo">Source on GitHub</a>
         <a href="#limits">What it does not do</a>
       </div>
     </div>
@@ -249,14 +249,14 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
     <div class="agents">
       <div class="agent">
         <h3>Install and connect</h3>
-        <pre>curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+        <pre>curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/install.sh | sh
 cloudundo install --write</pre>
         <p>Then quit and reopen Cursor, and in Codex run <code>/hooks</code> once to trust the hook. On Windows, run both lines inside WSL.</p>
       </div>
       <div class="agent">
         <h3>Your own agent</h3>
         <pre>cloudundo protect -- "&lt;the command&gt;"</pre>
-        <p>Call it before each shell command your agent runs. Exit code 0: run it. Anything else: don't. <a href="https://github.com/OWNER/cloudundo#your-own-agent">Example</a></p>
+        <p>Call it before each shell command your agent runs. Exit code 0: run it. Anything else: don't. <a href="https://github.com/cloudundo-dev/cloudundo#your-own-agent">Example</a></p>
       </div>
     </div>
   </section>
@@ -265,13 +265,13 @@ cloudundo install --write</pre>
     <p class="quote">AI coding agents have wiped production databases, their snapshots and terabytes of S3 data, often in seconds.</p>
     <div>
       <p>Most guardrails try to block risky commands, which slows agents down until people switch the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be taken back. Not only in production: staging and dev accounts hold data people need too, and agents work there all day.</p>
-      <p>It is a single program with no dependencies and no telemetry, open source under Apache 2.0, and it calls your own <code>aws</code> CLI with the same account and region as the agent's command. <a href="https://github.com/OWNER/cloudundo/blob/main/SECURITY.md">Everything it changes in your account</a> is listed.</p>
+      <p>It is a single program with no dependencies and no telemetry, open source under Apache 2.0, and it calls your own <code>aws</code> CLI with the same account and region as the agent's command. <a href="https://github.com/cloudundo-dev/cloudundo/blob/main/SECURITY.md">Everything it changes in your account</a> is listed.</p>
     </div>
   </section>
 
   <footer>
-    <span>cloudundo · Apache 2.0 · <a href="https://github.com/OWNER/cloudundo/blob/main/SECURITY.md">Security</a></span>
-    <a href="https://github.com/OWNER/cloudundo">github.com/OWNER/cloudundo</a>
+    <span>cloudundo · Apache 2.0 · <a href="https://github.com/cloudundo-dev/cloudundo/blob/main/SECURITY.md">Security</a></span>
+    <a href="https://github.com/cloudundo-dev/cloudundo">github.com/cloudundo-dev/cloudundo</a>
   </footer>
 </div>
 <script>

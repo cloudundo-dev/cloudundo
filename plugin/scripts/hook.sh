@@ -36,7 +36,7 @@ fi
 input=$(cat)
 if printf '%s' "$input" | grep -Eq '(^|[^A-Za-z0-9_-])(aws|terraform|tofu|redis-cli|valkey-cli)([^A-Za-z0-9_-]|$)'; then
   echo "cloudundo: blocked: this command may change AWS data, and the cloudundo program is not installed, so it cannot be made recoverable." >&2
-  echo "Install it: curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh" >&2
+  echo "Install it: curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/install.sh | sh" >&2
   echo "Do not run this another way. Tell the user what was blocked and why." >&2
   exit 2
 fi

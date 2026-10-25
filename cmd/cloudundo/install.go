@@ -98,7 +98,7 @@ const notFound = `cloudundo install: found no Claude Code, Cursor or Codex on th
 - If you use one of them, open it once (so it creates its settings folder) and run this again,
   or name it: cloudundo install claude-code --write   (or cursor, or codex)
 - If your agent is one you built, call cloudundo before each command it runs:
-  see "Your own agent" in https://github.com/OWNER/cloudundo#your-own-agent
+  see "Your own agent" in https://github.com/cloudundo-dev/cloudundo#your-own-agent
 `
 
 const installUsage = "usage: cloudundo install [claude-code|cursor|codex] [--write]"

@@ -42,7 +42,7 @@ About two minutes, on the computer where your agent runs its commands (Linux, ma
 **1. Install cloudundo**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/cloudundo/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/install.sh | sh
 ```
 
 This downloads the cloudundo program for your computer, checks that the download is the real one (SHA-256), and puts it in `~/.local/bin`.
@@ -75,7 +75,7 @@ From now on, commands that do not touch AWS data run as usual, and your agent's 
 - **Windows:** install and run it inside WSL (Ubuntu), where your agent runs its commands. With Cursor, open your project with **Connect to WSL**.
 - **`cloudundo: command not found`:** `~/.local/bin` is not on your PATH yet. Run `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc` (or `~/.zshrc` on macOS).
 - **One agent at a time:** `cloudundo install claude-code --write` (or `cursor`, `codex`). Without `--write`, `install` only shows what it would add. Each changed file is saved next to itself as `*.before-cloudundo`.
-- **Claude Code plugin**, instead of `install`: `/plugin marketplace add OWNER/cloudundo`, then `/plugin install cloudundo@cloudundo`. Use one or the other, not both, or every command is checked twice.
+- **Claude Code plugin**, instead of `install`: `/plugin marketplace add cloudundo-dev/cloudundo`, then `/plugin install cloudundo@cloudundo`. Use one or the other, not both, or every command is checked twice.
 - **No install script:** download a binary from the releases page, or build it with `go build ./cmd/cloudundo`.
 
 </details>
