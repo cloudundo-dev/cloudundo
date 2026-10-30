@@ -253,6 +253,8 @@ Run those with your own admin credentials. The command also prints how to create
 7. ~~`cloudundo cleanup` for old backups.~~ Done.
 8. CDK, SAM, Pulumi and Terragrunt plans; backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
 
+What would you want next? [Tell us](https://github.com/cloudundo-dev/cloudundo/issues/new?template=idea.yml): a real case of what your agent did, or what you are worried it might do, helps most.
+
 ## Development
 
 ```sh

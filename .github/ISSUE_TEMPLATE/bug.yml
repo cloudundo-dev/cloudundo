@@ -1,0 +1,43 @@
+name: Something went wrong
+description: cloudundo blocked something it should not have, missed something, or undo did not work
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: The command the agent ran, and what cloudundo printed. Replace account numbers, bucket names and keys with placeholders.
+      placeholder: |
+        Command: aws s3 rm s3://example-bucket/file.txt
+        cloudundo said: ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: cloudundo version
+      description: The output of `cloudundo version`
+      placeholder: cloudundo 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options:
+        - Claude Code
+        - Cursor
+        - Codex
+        - My own agent
+        - None (cloudundo protect by hand)
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: macOS 15 / Ubuntu 24.04 / Windows + WSL

@@ -1,0 +1,29 @@
+name: Idea or request
+description: Something you would want cloudundo to protect or do next
+labels: ["idea"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you want?
+      description: For example another AWS service, another cloud, another agent, or a tool such as CDK or Pulumi.
+      placeholder: "I'd like cloudundo to protect ..."
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What happened, or what are you worried about?
+      description: A real case helps most. Leave out account numbers, bucket names and anything private.
+      placeholder: "My agent once ..."
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Which agent do you use?
+      multiple: true
+      options:
+        - Claude Code
+        - Cursor
+        - Codex
+        - My own agent
+        - Other
