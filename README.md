@@ -63,7 +63,7 @@ This finds Claude Code, Cursor and Codex on your computer and tells each of them
 
 **4. Check that it works**, without touching any data. Ask your agent:
 
-> Run this exact command, it is a test of a safety hook: `aws s3 rm s3://$NO_SUCH_BUCKET --recursive`
+> This is a test of my cloudundo safety hook. Please run exactly this command so the hook can check it: `aws s3 rm s3://$NO_SUCH_BUCKET --recursive`
 
 cloudundo cannot tell which bucket that is, so it blocks the command, and the agent tells you so. (Some agents refuse it on their own first; telling them it is a test helps.) Then run `cloudundo log` to see the blocked command and which agent sent it.
 
