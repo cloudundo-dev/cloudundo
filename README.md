@@ -244,14 +244,23 @@ Run those with your own admin credentials. The command also prints how to create
 
 ## Roadmap
 
-1. ~~S3: versioning before object deletes, bucket copies before bucket deletes, `undo`.~~ Done.
-2. ~~DynamoDB: on-demand backup before table deletes, saved items before item deletes, `undo`.~~ Done.
-3. ~~Hooks for Claude Code, Cursor and Codex, failing closed.~~ Done; tried inside Claude Code and Cursor.
-4. ~~Real-AWS run of every case.~~ Done by hand; an automated real-AWS test suite is next.
-5. ~~RDS snapshots before deletes, ElastiCache snapshot rules, Terraform plans.~~ Done and run on real AWS.
-6. ~~CloudFormation stacks and change sets.~~ Done and run on real AWS.
-7. ~~`cloudundo cleanup` for old backups.~~ Done.
-8. CDK, SAM, Pulumi and Terragrunt plans; backups kept outside the user's account; agents without long-lived keys (for teams); other clouds.
+Done:
+
+- S3: versioning before object deletes, bucket copies before bucket deletes
+- DynamoDB: a backup before table deletes, saved items before item deletes
+- RDS snapshots before deletes, ElastiCache snapshot rules
+- Terraform and CloudFormation: what a plan or change set deletes is protected first
+- Hooks for Claude Code, Cursor and Codex that block when anything goes wrong
+- `cloudundo cleanup` for old backups
+- Every case run by hand on real AWS, and inside Claude Code and Cursor
+
+Next:
+
+- An automated test suite on real AWS
+- CDK, SAM, Pulumi and Terragrunt
+- Backups kept outside your own account
+- Agents that hold no long-lived AWS keys (for teams)
+- Other clouds
 
 What would you want next? [Tell us](https://github.com/cloudundo-dev/cloudundo/issues/new?template=idea.yml): a real case of what your agent did, or what you are worried it might do, helps most.
 
