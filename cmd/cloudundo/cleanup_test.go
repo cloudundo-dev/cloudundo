@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
 )
 
 func TestCleanupListsThenDeletesOnlyWhatWasChosen(t *testing.T) {

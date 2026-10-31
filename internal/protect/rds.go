@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // reuseWindow is how old a cloudundo snapshot may be and still protect a

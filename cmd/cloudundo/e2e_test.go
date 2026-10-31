@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/awstest"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/awstest"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // TestEndToEnd runs cloudundo the way agents do: the built program, started

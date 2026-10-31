@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/cleanup"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/cleanup"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // cmdCleanup lists the backups cloudundo kept, and with --yes deletes the

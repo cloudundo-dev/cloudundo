@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
 )
 
 func TestAppendListGet(t *testing.T) {

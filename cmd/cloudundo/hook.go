@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/cloudundo/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
 	"io"
 	"os"
 	"strings"

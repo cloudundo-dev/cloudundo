@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // planDB restores a deleted RDS database from its snapshot with the

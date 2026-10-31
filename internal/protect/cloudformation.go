@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
 )
 
 // maxNested bounds how deep nested stacks are followed.

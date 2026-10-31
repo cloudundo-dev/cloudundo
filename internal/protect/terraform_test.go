@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
 )
 
 // fakeTerraform writes a stand-in terraform that logs how it was called.

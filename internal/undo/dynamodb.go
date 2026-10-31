@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // planItems puts saved DynamoDB items back. DynamoDB keeps no history, so

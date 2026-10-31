@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // tableBackup makes an on-demand backup before a table is deleted, waits

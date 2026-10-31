@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cloudundo/cloudundo/internal/policy"
+	"github.com/cloudundo-dev/cloudundo/internal/policy"
 )
 
 // cmdPolicy prints the IAM policy for the agent's credentials. The JSON

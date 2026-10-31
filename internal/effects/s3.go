@@ -13,8 +13,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/shellparse"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/shellparse"
 )
 
 // Kind is what a command does to S3 data.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 func ddbSetup(t *testing.T) (*Config, func(string) Result) {

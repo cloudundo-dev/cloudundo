@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 // ClientFor returns a CLI client for a Conn.

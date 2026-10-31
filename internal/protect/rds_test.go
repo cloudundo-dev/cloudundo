@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
 )
 
 func rdsSetup(t *testing.T) (*Config, func(string) Result, func() []string) {

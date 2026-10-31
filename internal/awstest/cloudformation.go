@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
 )
 
 // FakeResource is one resource of a fake CloudFormation stack.

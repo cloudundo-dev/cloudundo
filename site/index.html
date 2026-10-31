@@ -251,7 +251,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
         <h3>Install and connect</h3>
         <pre>curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/install.sh | sh
 cloudundo install --write</pre>
-        <p>Then quit and reopen Cursor, and in Codex run <code>/hooks</code> once to trust the hook. On Windows, run both lines inside WSL.</p>
+        <p>Then start a new Claude Code session, quit and reopen Cursor, and in Codex run <code>/hooks</code> once to trust the hook. On Windows, run both lines inside WSL.</p>
       </div>
       <div class="agent">
         <h3>Your own agent</h3>
@@ -262,7 +262,7 @@ cloudundo install --write</pre>
   </section>
 
   <section class="why">
-    <p class="quote">AI coding agents have wiped production databases, their snapshots and terabytes of S3 data, often in seconds.</p>
+    <p class="quote">AI coding agents have wiped production databases, and the snapshots meant to back them up, in seconds.</p>
     <div>
       <p>Most guardrails try to block risky commands, which slows agents down until people switch the guardrails off. cloudundo takes the other route: let the agent work, and make sure a delete can be taken back. Not only in production: staging and dev accounts hold data people need too, and agents work there all day.</p>
       <p>It is a single program with no dependencies and no telemetry, open source under Apache 2.0, and it calls your own <code>aws</code> CLI with the same account and region as the agent's command. <a href="https://github.com/cloudundo-dev/cloudundo/blob/main/SECURITY.md">Everything it changes in your account</a> is listed.</p>

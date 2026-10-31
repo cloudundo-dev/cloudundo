@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
-	"github.com/cloudundo/cloudundo/internal/journal"
-	"github.com/cloudundo/cloudundo/internal/protect"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/protect"
 )
 
 var prodDB = awscli.DBInfo{

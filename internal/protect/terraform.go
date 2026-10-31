@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
-	"github.com/cloudundo/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
 )
 
 // Planner returns `terraform show -json` of the plan a terraform command

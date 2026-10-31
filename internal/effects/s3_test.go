@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
 )
 
 // strip clears fields the table does not care about.

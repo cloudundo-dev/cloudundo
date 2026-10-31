@@ -13,8 +13,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudundo/cloudundo/internal/effects"
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/effects"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 var version = "0.0.1-dev"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
 )
 
 // CreateTable adds a table for a test.

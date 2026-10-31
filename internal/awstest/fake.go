@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/awscli"
+	"github.com/cloudundo-dev/cloudundo/internal/awscli"
 )
 
 type version struct {

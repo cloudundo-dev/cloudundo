@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudundo/cloudundo/internal/journal"
+	"github.com/cloudundo-dev/cloudundo/internal/journal"
 )
 
 func hookRun(t *testing.T, agent, input string) (int, string, string) {
