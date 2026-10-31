@@ -2,11 +2,11 @@
 
 **Your AI agent can delete anything. You can always get it back.**
 
-<!-- Demo GIF: docs/demo.gif (recorded before launch) -->
+<!-- Demo GIF goes here -->
 
 cloudundo sits in front of the AWS, Terraform and CloudFormation commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3, DynamoDB or RDS, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back. For ElastiCache (Redis, Valkey) it makes sure a snapshot is kept, or stops the delete.
 
-> **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; a `terraform destroy` of a database, a bucket and a table; a CloudFormation deploy that drops a table and a stack delete; and `cleanup`. The hooks were tried inside Claude Code and Cursor (on Windows, connected to WSL): commands pass, deletes are protected, unclear commands are blocked, a `terraform destroy` run by the agent is protected, and undo works. The Codex hook follows Codex's documentation and has not been tried inside Codex yet ([checklist](docs/TRY-THE-HOOKS.md)). Try it on a test account before production data.
+> **Status: early, v0.1.** Every case is tested against a simulated AWS. Run by hand on real AWS, and undone: S3 object delete, overwrite and bucket delete; DynamoDB item and table delete; an RDS delete through the AWS CLI; a `terraform destroy` of a database, a bucket and a table; a CloudFormation deploy that drops a table and a stack delete; and `cleanup`. The hooks were tried inside Claude Code and Cursor (on Windows, connected to WSL): commands pass, deletes are protected, unclear commands are blocked, a `terraform destroy` run by the agent is protected, and undo works. The Codex hook follows Codex's documentation and has not been tried inside Codex yet. Try it on a test account before production data.
 
 ```text
 you:    "clean up the old test data"
@@ -271,8 +271,6 @@ make build     # ./cloudundo
 make check     # vet, gofmt, tests with -race, short fuzzing
 make release   # dist/: binaries for Linux, macOS, Windows + checksums.txt
 ```
-
-Recording a demo: [docs/DEMO.md](docs/DEMO.md).
 
 No dependencies outside the Go standard library.
 
