@@ -47,6 +47,19 @@ curl -fsSL https://raw.githubusercontent.com/cloudundo-dev/cloudundo/main/instal
 
 This downloads the cloudundo program for your computer, checks that the download is the real one (SHA-256), and puts it in `~/.local/bin`.
 
+Want to see what it does first? `cloudundo check` reads a command and says what it would change, without touching AWS:
+
+```text
+$ cloudundo check -- 'aws s3 rm s3://uploads --recursive'
+DELETE     s3://uploads/*
+$ cloudundo check -- 'aws s3 ls s3://uploads'
+No data changes found.
+$ cloudundo check -- 'aws s3 rm s3://$BUCKET --recursive'
+DELETE     s3://$BUCKET/*  (target not fully known)
+```
+
+The first is made recoverable before it runs, the second runs as usual, and the third is blocked: cloudundo cannot tell which bucket it would empty.
+
 **2. Connect it to your agents**
 
 ```sh
@@ -263,6 +276,8 @@ Next:
 - Other clouds
 
 What would you want next? [Tell us](https://github.com/cloudundo-dev/cloudundo/issues/new?template=idea.yml): a real case of what your agent did, or what you are worried it might do, helps most.
+
+If cloudundo saved you once, a ⭐ on GitHub helps others find it.
 
 ## Development
 
