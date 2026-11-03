@@ -659,32 +659,35 @@ func TestLogShowsWhatWasSaved(t *testing.T) {
 	}
 }
 
-// The "see what it does first" example in the README runs without AWS
-// and prints exactly what the README shows.
+// The "see what it does first" example in the README runs without AWS,
+// can be pasted into a shell as is, and prints what the README says.
 func TestReadmeCheckExample(t *testing.T) {
 	b, err := os.ReadFile("../../README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, after, ok := strings.Cut(string(b), "without touching AWS:\n\n```text\n")
-	block, _, ok2 := strings.Cut(after, "```")
+	readme := string(b)
+	_, after, ok := strings.Cut(readme, "without touching AWS:\n\n```sh\n")
+	block, rest, ok2 := strings.Cut(after, "```")
 	if !ok || !ok2 {
 		t.Fatal("README has no cloudundo check example")
 	}
-	var want, got []string
-	for _, line := range strings.Split(strings.TrimSpace(block), "\n") {
-		cmd, isCmd := strings.CutPrefix(line, "$ cloudundo check -- ")
+	explained, _, _ := strings.Cut(rest, "**2.")
+	lines := strings.Split(strings.TrimSpace(block), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("want 3 commands, got %q", lines)
+	}
+	for _, line := range lines {
+		cmd, isCmd := strings.CutPrefix(line, "cloudundo check -- ")
 		if !isCmd {
-			want = append(want, line)
-			continue
+			t.Fatalf("line %q is not a command that can be pasted", line)
 		}
 		code, out, errOut := runCLI(t, "check", "--", strings.Trim(cmd, "'"))
 		if code != 0 {
 			t.Fatalf("check %s: exit %d %s", cmd, code, errOut)
 		}
-		got = append(got, strings.Split(strings.TrimSpace(out), "\n")...)
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("README shows:\n%s\ncloudundo prints:\n%s", strings.Join(want, "\n"), strings.Join(got, "\n"))
+		if got := strings.TrimSpace(out); !strings.Contains(explained, "`"+got+"`") {
+			t.Fatalf("cloudundo prints %q, which the README text under the example does not show", got)
+		}
 	}
 }

@@ -49,16 +49,13 @@ This downloads the cloudundo program for your computer, checks that the download
 
 Want to see what it does first? `cloudundo check` reads a command and says what it would change, without touching AWS:
 
-```text
-$ cloudundo check -- 'aws s3 rm s3://uploads --recursive'
-DELETE     s3://uploads/*
-$ cloudundo check -- 'aws s3 ls s3://uploads'
-No data changes found.
-$ cloudundo check -- 'aws s3 rm s3://$BUCKET --recursive'
-DELETE     s3://$BUCKET/*  (target not fully known)
+```sh
+cloudundo check -- 'aws s3 rm s3://uploads --recursive'
+cloudundo check -- 'aws s3 ls s3://uploads'
+cloudundo check -- 'aws s3 rm s3://$BUCKET --recursive'
 ```
 
-The first is made recoverable before it runs, the second runs as usual, and the third is blocked: cloudundo cannot tell which bucket it would empty.
+The first prints `DELETE     s3://uploads/*`: cloudundo would make it recoverable before it runs. The second prints `No data changes found.`: it runs as usual. The third prints `DELETE     s3://$BUCKET/*  (target not fully known)`: cloudundo would block it, because it cannot tell which bucket it would empty.
 
 That is only a preview. The protection and `undo` start in step 2, once cloudundo is connected to your agent.
 
