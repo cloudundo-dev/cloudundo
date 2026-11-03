@@ -60,6 +60,8 @@ DELETE     s3://$BUCKET/*  (target not fully known)
 
 The first is made recoverable before it runs, the second runs as usual, and the third is blocked: cloudundo cannot tell which bucket it would empty.
 
+That is only a preview. The protection and `undo` start in step 2, once cloudundo is connected to your agent.
+
 **2. Connect it to your agents**
 
 ```sh
