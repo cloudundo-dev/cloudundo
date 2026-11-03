@@ -2,7 +2,7 @@
 
 **Your AI agent can delete anything. You can always get it back.**
 
-<!-- Demo GIF goes here -->
+![Claude Code deletes four files from S3; cloudundo saved them first, and cloudundo undo brings them back](assets/demo.gif)
 
 cloudundo sits in front of the AWS, Terraform and CloudFormation commands your coding agent runs (Claude Code, Cursor, Codex). Before a command deletes or overwrites data in S3, DynamoDB or RDS, cloudundo makes that change recoverable. If something goes wrong, `cloudundo undo` brings the data back. For ElastiCache (Redis, Valkey) it makes sure a snapshot is kept, or stops the delete.
 
