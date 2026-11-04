@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one reading column, opened by a terminal transcript of a delete and its undo; then the sequence, the coverage table, the limits, and setup per agent. */
+/* Layout: one reading column, opened by a recording of a real delete and its undo; then the sequence, the coverage table, the limits, and setup per agent. */
 :root {
   --bg: #f2f5f8;
   --surface: #ffffff;
@@ -81,16 +81,9 @@ p { margin: 0; }
 .hero .links { margin-top: 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.95rem; }
 
 /* Terminal transcript */
-.term { background: var(--term-bg); color: var(--term-fg); border-radius: 10px; font: 0.82rem/1.65 var(--font-mono); padding: 18px 20px; overflow-x: auto; min-width: 0; box-shadow: 0 18px 40px -24px rgba(10, 20, 35, 0.6); }
-.term .bar { display: flex; gap: 6px; margin-bottom: 14px; }
-.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #2b3746; display: block; }
-.term .line { white-space: pre; }
-.term .p { color: var(--term-dim); }
-.term .cmd { color: #ffffff; }
-.term .who { color: #f2c46d; }
-.term .ok { color: #7fe0a6; }
-.term .del { color: #ff9b8a; }
-.term .gap { height: 10px; }
+.demo { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.demo img { display: block; width: 100%; height: auto; border-radius: 10px; box-shadow: 0 18px 40px -24px rgba(10, 20, 35, 0.6); }
+.demo figcaption { font-size: 0.9rem; color: var(--muted); }
 
 /* Sections */
 section { padding-block: 56px; border-top: 1px solid var(--line); }
@@ -132,12 +125,6 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
   .steps, .agents, .limits { grid-template-columns: minmax(0, 1fr); }
   .top nav { gap: 14px; }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .term .line { animation: rise 0.4s ease-out both; }
-  .term .line:nth-child(n+6) { animation-delay: 0.15s; }
-  .term .line:nth-child(n+12) { animation-delay: 0.3s; }
-  @keyframes rise { from { opacity: 0.35; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-}
 </style>
 </head>
 <body>
@@ -166,24 +153,10 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
       </div>
     </div>
 
-    <div class="term" role="img" aria-label="Terminal: an agent runs terraform destroy, cloudundo snapshots the database first, and cloudundo undo restores it">
-      <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
-      <div class="line"><span class="who">agent</span><span class="p"> $ </span><span class="cmd">terraform destroy -auto-approve</span></div>
-      <div class="line"><span class="p">cloudundo: protected #3</span></div>
-      <div class="line"><span class="ok">  + made snapshot cloudundo-courses-db-20261019-221500 of database courses-db</span></div>
-      <div class="line"><span class="ok">  + copied 1204 objects (3.1 GB) from s3://course-uploads to s3://cloudundo-backup-…</span></div>
-      <div class="line"><span class="ok">  + made on-demand backup cloudundo-sessions-… of DynamoDB table sessions</span></div>
-      <div class="line"><span class="p">  Undo with: cloudundo undo 3</span></div>
-      <div class="line"><span class="del">aws_db_instance.main: Destruction complete after 6m12s</span></div>
-      <div class="line"><span class="del">Destroy complete! Resources: 9 destroyed.</span></div>
-      <div class="gap"></div>
-      <div class="line"><span class="who">you</span><span class="p">   $ </span><span class="cmd">cloudundo undo 3 --yes</span></div>
-      <div class="line"><span class="p">  - restore database courses-db from snapshot cloudundo-courses-db-… with its old settings</span></div>
-      <div class="line"><span class="p">  - recreate s3://course-uploads in us-east-1</span></div>
-      <div class="line"><span class="p">  - copy 1204 objects from s3://cloudundo-backup-… back into s3://course-uploads</span></div>
-      <div class="line"><span class="p">  - restore DynamoDB table sessions from backup arn:aws:dynamodb:…</span></div>
-      <div class="line"><span class="ok">Started (4 steps). Run `cloudundo undo 3 --yes` again in a few minutes to finish.</span></div>
-    </div>
+    <figure class="demo">
+      <img src="demo.gif" width="1228" height="756" alt="A real run: Claude Code deletes four customer files from S3, cloudundo turns on versioning first, and cloudundo undo brings the files back">
+      <figcaption>A real run with Claude Code and AWS S3.</figcaption>
+    </figure>
   </div>
 
   <section id="how">
