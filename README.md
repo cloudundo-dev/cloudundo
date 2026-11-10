@@ -195,6 +195,7 @@ Plainly, so you can decide where it fits:
 
 - **cloudundo is a seatbelt for mistakes, not a lock against a hostile agent.** The agent still holds your AWS keys. cloudundo makes the deletes it sees recoverable; it does not take the keys away.
 - **It sees command lines, not what programs do.** A `./deploy.sh`, a Python script or an SDK call (such as boto3) that deletes data is not seen by the hook. The policy below closes part of this gap.
+- **A command that is not written out plainly is not seen yet.** One hidden inside `eval`, piped into a shell (`echo "aws s3 rm ..." | bash`), built from a variable (`$CMD s3 rm ...`) or run in a container (`docker run amazon/aws-cli ...`) passes without protection. `bash -c "..."`, `sudo`, `env` and `xargs` are seen.
 - **Data deleted from inside a database is not seen.** `DROP TABLE` or `DELETE FROM` through `psql` or `mysql` goes straight to the database, not through the AWS CLI. Use your database's own backups (RDS automated backups, point-in-time recovery) for that.
 - **S3, DynamoDB, RDS and ElastiCache**, through the AWS CLI, Terraform or CloudFormation. EBS, EFS, other clouds: not yet. Terraform restores the data, not the infrastructure around it (networks, load balancers, IAM): re-apply your Terraform for those.
 - **A plan that deletes data cloudundo cannot back up yet** (EBS volumes, EFS, Redshift, DocumentDB, OpenSearch, KMS keys and similar) is blocked, with the resource named, instead of running unprotected.
