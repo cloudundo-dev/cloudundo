@@ -265,7 +265,7 @@ Done:
 - Terraform and CloudFormation: what a plan or change set deletes is protected first
 - Hooks for Claude Code, Cursor and Codex that block when anything goes wrong
 - `cloudundo cleanup` for old backups
-- Every case run by hand on real AWS, and inside Claude Code and Cursor
+- S3, DynamoDB, RDS, Terraform and CloudFormation run by hand on real AWS, and inside Claude Code and Cursor
 
 Next:
 
