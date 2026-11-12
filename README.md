@@ -269,11 +269,11 @@ Done:
 
 Next:
 
-- An automated test suite on real AWS
-- CDK, SAM, Pulumi and Terragrunt
 - Backups kept outside your own account
+- CDK, SAM, Pulumi and Terragrunt
 - Agents that hold no long-lived AWS keys (for teams)
 - Other clouds
+- An automated test suite on real AWS
 
 What would you want next? [Tell us](https://github.com/cloudundo-dev/cloudundo/issues/new?template=idea.yml): a real case of what your agent did, or what you are worried it might do, helps most.
 
